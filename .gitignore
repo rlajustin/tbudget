@@ -1,0 +1,61 @@
+# Compiled object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Compiled dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled static libraries
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Project executable
+tbudget
+
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Core dumps
+core
+
+# Build directories
+build/
+bin/
+obj/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Project-specific files
+# Add your executable name here
+# myapp
+
+# Data files that might be generated during runtime
+*.log
+*.dat
+*.db
+*.sqlite
+
+# Backup files
+*.bak
+*.backup
