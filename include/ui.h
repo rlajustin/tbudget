@@ -1,17 +1,15 @@
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef UI_H
+#define UI_H
 
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <unistd.h>
-#include <pwd.h>
+#include "globals.h"
+#include "utils.h"
 
-// Function prototypes
+// Function prototypes for ui.c
 void setup_ncurses();
 void cleanup_ncurses();
 void draw_title(WINDOW *win, const char *title);
@@ -23,13 +21,7 @@ int get_int_input(WINDOW *win, int y, int x);
 int get_date_input(WINDOW *win, char *date_buffer, int y, int x);
 void display_categories(WINDOW *win, int start_y);
 void display_transactions(WINDOW *win, int start_y);
-void write_export_content(FILE *export_file);
-void export_data_to_csv(int silent);
-void import_data_from_csv(const char *filename);
-void save_data_to_file();
-void load_data_from_file();
-char *get_home_directory();
-int create_directory_if_not_exists(const char *path);
-void initialize_data_directories();
+void format_date(WINDOW *win, int y, int x, int day, int month, int year, int highlighted_field, int cursor_positions[]);
 
-#endif // UTILS_H 
+#endif // UI_H
+

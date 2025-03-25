@@ -1,15 +1,7 @@
-#ifndef MAIN_H
-#define MAIN_H
+#ifndef GLOBALS_H
+#define GLOBALS_H
 
 #include <ncurses.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <unistd.h>
-#include <pwd.h>
 
 // Constants
 #define MAX_CATEGORIES 20
@@ -59,18 +51,4 @@ extern char data_storage_dir[MAX_BUFFER];
 extern char data_file_path[MAX_BUFFER];
 extern char export_file_path[MAX_BUFFER];
 
-// Function prototypes
-void budget_setup();
-void manage_transactions();
-void run_menu_mode();
-void run_dashboard_mode();
-void print_usage(const char *program_name);
-
-// Dashboard mode helper functions
-void add_category_dialog();
-void remove_category_dialog();
-void set_budget_dialog();
-void add_transaction_dialog();
-void remove_transaction_dialog();
-
-#endif // MAIN_H 
+#endif

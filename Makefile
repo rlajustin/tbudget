@@ -1,9 +1,10 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -I./include
 LDFLAGS = -lncurses
 
 TARGET = tbudget
-SRC = main.c utils.c
+SRC_DIR = src
+SRC = $(SRC_DIR)/main.c $(SRC_DIR)/actions.c $(SRC_DIR)/utils.c $(SRC_DIR)/ui.c $(SRC_DIR)/globals.c
 PREFIX = /usr/local
 
 all: $(TARGET)
