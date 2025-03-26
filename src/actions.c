@@ -24,11 +24,9 @@ void add_category_dialog()
     }
 
     // Get category name
-    int x, y;
     wnoutrefresh(dialog.textbox);
 
-    getyx(dialog.textbox, y, x);
-    if (!get_input(dialog.textbox, categories[category_count].name, "Enter category name: ", MAX_NAME_LEN, y, INPUT_STRING))
+    if (!get_input(dialog.textbox, categories[category_count].name, "Enter category name: ", MAX_NAME_LEN, INPUT_STRING))
     {
         destroy_bounded(dialog);
         return; // User canceled
@@ -37,9 +35,8 @@ void add_category_dialog()
     // Get amount
     wnoutrefresh(dialog.textbox);
 
-    getyx(dialog.textbox, y, x);
     double amount = -1.0;
-    if (get_input(dialog.textbox, &amount, "Enter allocated amount: $", MAX_BUFFER, y, INPUT_DOUBLE) == 0)
+    if (!get_input(dialog.textbox, &amount, "Enter allocated amount: $", MAX_BUFFER, INPUT_DOUBLE))
     {
         amount = -1.0; // Ensure -1.0 is returned if user cancels
     }
@@ -51,7 +48,9 @@ void add_category_dialog()
         return;
     }
 
-    categories[category_count].amount = amount;
+    categories[category_count].budget = amount;
+    categories[category_count].spent = 0.0;
+    categories[category_count].bonus = 0.0;
     category_count++;
     save_data_to_file(); // Save after adding category
 
@@ -103,7 +102,7 @@ void remove_category_dialog()
             draw_error(dialog, "Memory allocation error.");
             return;
         }
-        sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[i].name, categories[i].amount);
+        sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[i].name, categories[i].budget);
     }
 
     int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6);
@@ -147,7 +146,9 @@ void remove_category_dialog()
         for (int i = cat_choice; i < category_count - 1; i++)
         {
             strcpy(categories[i].name, categories[i + 1].name);
-            categories[i].amount = categories[i + 1].amount;
+            categories[i].budget = categories[i + 1].budget;
+            categories[i].spent = categories[i + 1].spent;
+            categories[i].bonus = categories[i + 1].bonus;
         }
 
         category_count--;
@@ -165,7 +166,7 @@ void set_budget_dialog()
     getmaxyx(win, max_y, max_x);
 
     // Create a dialog box centered on screen
-    int dialog_height = 7;
+    int dialog_height = 9;
     int dialog_width = 50;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
@@ -173,11 +174,12 @@ void set_budget_dialog()
     BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Set Total Budget ", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
+    // Current budget
     mvwprintw(dialog.textbox, 2, 0, "Current Budget: $%.2f", total_budget);
     wnoutrefresh(dialog.textbox);
 
     double new_budget = -1.0;
-    if (get_input(dialog.textbox, &new_budget, "Enter new total budget amount: $", MAX_BUFFER, 4, INPUT_DOUBLE) == 0)
+    if (!get_input(dialog.textbox, &new_budget, "Enter new total budget amount: $", MAX_BUFFER, INPUT_DOUBLE))
     {
         new_budget = -1.0; // Ensure -1.0 is returned if user cancels
     }
@@ -239,7 +241,7 @@ void add_transaction_dialog()
     // Get transaction description
     wrefresh(dialog.textbox);
 
-    if (!get_input(dialog.textbox, new_transaction.description, "Enter transaction description: ", MAX_NAME_LEN, 2, INPUT_STRING))
+    if (!get_input(dialog.textbox, new_transaction.description, "Enter transaction description: ", MAX_NAME_LEN, INPUT_STRING))
     {
         destroy_bounded(dialog);
         return; // User canceled
@@ -249,7 +251,7 @@ void add_transaction_dialog()
     wrefresh(dialog.textbox);
 
     double amount = -1.0;
-    if (!get_input(dialog.textbox, &amount, "Enter amount: $", MAX_BUFFER, 6, INPUT_DOUBLE))
+    if (!get_input(dialog.textbox, &amount, "Enter amount: $", MAX_BUFFER, INPUT_DOUBLE))
     {
         amount = -1.0; // Ensure -1.0 is returned if user cancels
     }
@@ -264,13 +266,13 @@ void add_transaction_dialog()
     new_transaction.amount = amount;
 
     // Get date
-    mvwprintw(dialog.textbox, 8, 0, "Enter date (DD-MM-YYYY): ");
-    // Set default date to empty for now - our function will handle defaults
-    char date_buffer[11] = "";
-    mvwprintw(dialog.textbox, 9, 0, "(Use arrow keys or Type)");
-    wrefresh(dialog.textbox);
+    // mvwprintw(dialog.textbox, 8, 0, "Enter date (DD-MM-YYYY): ");
+    // // Set default date to empty for now - our function will handle defaults
+    // mvwprintw(dialog.textbox, 9, 0, "(Use arrow keys or Type)");
+    // wrefresh(dialog.textbox);
 
-    if (!get_date_input(dialog.textbox, date_buffer, 8, 29))
+    char date_buffer[11] = "";
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter date (DD-MM-YYYY): "))
     {
         destroy_bounded(dialog);
         return; // User canceled

@@ -13,22 +13,22 @@ void write_export_content(FILE *export_file) {
     
     double total_allocated = 0.0;
     for (int i = 0; i < category_count; i++) {
-        total_allocated += categories[i].amount;
+        total_allocated += categories[i].budget;
     }
     
     for (int i = 0; i < category_count; i++) {
         double percentage = 0.0;
         if (total_budget > 0) {
-            percentage = (categories[i].amount / total_budget) * 100.0;
+            percentage = (categories[i].budget / total_budget) * 100.0;
         }
         
         // Escape category names with quotes if they contain commas
         if (strchr(categories[i].name, ',') != NULL) {
             fprintf(export_file, "\"%s\",%.2f,%.2f%%\n", 
-                    categories[i].name, categories[i].amount, percentage);
+                    categories[i].name, categories[i].budget, percentage);
         } else {
             fprintf(export_file, "%s,%.2f,%.2f%%\n", 
-                    categories[i].name, categories[i].amount, percentage);
+                    categories[i].name, categories[i].budget, percentage);
         }
     }
     
@@ -245,7 +245,7 @@ void import_data_from_csv(const char *filename)
             {
                 strncpy(categories[category_count].name, name, MAX_NAME_LEN - 1);
                 categories[category_count].name[MAX_NAME_LEN - 1] = '\0';
-                categories[category_count].amount = amount;
+                categories[category_count].budget = amount;
                 category_count++;
             }
         }
@@ -368,7 +368,7 @@ void import_data_from_csv(const char *filename)
                 {
                     strncpy(categories[category_count].name, category_name, MAX_NAME_LEN - 1);
                     categories[category_count].name[MAX_NAME_LEN - 1] = '\0';
-                    categories[category_count].amount = 0.0;
+                    categories[category_count].budget = 0.0;
                     category_id = category_count;
                     category_count++;
                 }
@@ -401,7 +401,7 @@ void import_data_from_csv(const char *filename)
 
 void save_data_to_file()
 {
-    FILE *file = fopen(data_file_path, "w");
+    FILE *file = fopen(data_file_path, "wb");
     if (!file)
     {
         // If unable to open file, just return silently
@@ -409,278 +409,110 @@ void save_data_to_file()
         return;
     }
 
-    // Write CSV-compatible format
-    // First line: header for budget
-    fprintf(file, "BUDGET,%.2f\n", total_budget);
-
-    // Second section: categories
-    fprintf(file, "CATEGORIES\n");
-    fprintf(file, "Name,Amount\n");
-    for (int i = 0; i < category_count; i++)
-    {
-        // Escape any commas in the name with quotes
-        if (strchr(categories[i].name, ',') != NULL)
-        {
-            fprintf(file, "\"%s\",%.2f\n", categories[i].name, categories[i].amount);
-        }
-        else
-        {
-            fprintf(file, "%s,%.2f\n", categories[i].name, categories[i].amount);
-        }
-    }
-
-    // Third section: transactions
-    fprintf(file, "TRANSACTIONS\n");
-    fprintf(file, "Description,Amount,CategoryID,Date\n");
-    for (int i = 0; i < transaction_count; i++)
-    {
-        // Escape any commas in the description with quotes
-        if (strchr(transactions[i].description, ',') != NULL)
-        {
-            fprintf(file, "\"%s\",%.2f,%d,%s\n",
-                    transactions[i].description,
-                    transactions[i].amount,
-                    transactions[i].category_id,
-                    transactions[i].date);
-        }
-        else
-        {
-            fprintf(file, "%s,%.2f,%d,%s\n",
-                    transactions[i].description,
-                    transactions[i].amount,
-                    transactions[i].category_id,
-                    transactions[i].date);
-        }
-    }
-
+    // Write a simple header for file format validation
+    const char header[] = "TBUDGET_DATA";
+    fwrite(header, sizeof(char), strlen(header), file);
+    
+    // Write version for future compatibility
+    const int version = 1;
+    fwrite(&version, sizeof(int), 1, file);
+    
+    // Write total budget
+    fwrite(&total_budget, sizeof(double), 1, file);
+    
+    // Write category count
+    fwrite(&category_count, sizeof(int), 1, file);
+    
+    // Write all categories at once
+    fwrite(categories, sizeof(Category), category_count, file);
+    
+    // Write transaction count
+    fwrite(&transaction_count, sizeof(int), 1, file);
+    
+    // Write all transactions at once
+    fwrite(transactions, sizeof(Transaction), transaction_count, file);
+    
     fclose(file);
-
-    // Automatically export to CSV whenever data is saved
-    export_data_to_csv(1); // Silent, don't show message when automatic
 }
 
-void load_data_from_file()
+int load_data_from_file()
 {
-    FILE *file = fopen(data_file_path, "r");
+    FILE *file = fopen(data_file_path, "rb");
     if (!file)
     {
         // If file doesn't exist, that's okay - we'll start with empty data
-        return;
+        return 0;
     }
 
-    char line[MAX_BUFFER];
-    int section = 0; // 0 = budget, 1 = categories, 2 = transactions
-
-    // Reset data
-    category_count = 0;
-    transaction_count = 0;
-
-    // Read file line by line
-    while (fgets(line, sizeof(line), file))
+    // Read and validate header
+    char header[13] = {0}; // "TBUDGET_DATA" is 12 chars + null terminator
+    if (fread(header, sizeof(char), 12, file) != 12 || strcmp(header, "TBUDGET_DATA") != 0)
     {
-        // Remove newline
-        line[strcspn(line, "\r\n")] = 0;
-
-        // Skip empty lines
-        if (strlen(line) == 0)
-        {
-            continue;
-        }
-
-        // Check for section headers
-        if (strncmp(line, "BUDGET,", 7) == 0)
-        {
-            total_budget = atof(line + 7);
-            continue;
-        }
-        else if (strcmp(line, "CATEGORIES") == 0)
-        {
-            section = 1;
-            continue;
-        }
-        else if (strcmp(line, "TRANSACTIONS") == 0)
-        {
-            section = 2;
-            continue;
-        }
-
-        // Skip header lines
-        if (strncmp(line, "Name,", 5) == 0 || strncmp(line, "Description,", 12) == 0)
-        {
-            continue;
-        }
-
-        // Parse data based on section
-        if (section == 1 && category_count < MAX_CATEGORIES)
-        {
-            // Categories section
-            char name[MAX_NAME_LEN] = {0};
-            double amount = 0.0;
-
-            // Handle quoted fields (for names with commas)
-            if (line[0] == '"')
-            {
-                int i = 1;
-                int j = 0;
-                // Extract text until the closing quote
-                while (line[i] != '"' && line[i] != '\0' && j < MAX_NAME_LEN - 1)
-                {
-                    name[j++] = line[i++];
-                }
-                name[j] = '\0';
-
-                // Skip to the comma after the closing quote
-                while (line[i] != ',' && line[i] != '\0')
-                {
-                    i++;
-                }
-
-                // Skip the comma
-                if (line[i] == ',')
-                {
-                    i++;
-                }
-
-                // Parse amount
-                amount = atof(line + i);
-            }
-            else
-            {
-                // Simple case: no quotes
-                char *comma = strchr(line, ',');
-                if (comma)
-                {
-                    int name_len = comma - line;
-                    if (name_len > MAX_NAME_LEN - 1)
-                    {
-                        name_len = MAX_NAME_LEN - 1;
-                    }
-                    strncpy(name, line, name_len);
-                    name[name_len] = '\0';
-
-                    amount = atof(comma + 1);
-                }
-            }
-
-            // Store in category array
-            if (strlen(name) > 0)
-            {
-                strncpy(categories[category_count].name, name, MAX_NAME_LEN - 1);
-                categories[category_count].name[MAX_NAME_LEN - 1] = '\0';
-                categories[category_count].amount = amount;
-                category_count++;
-            }
-        }
-        else if (section == 2 && transaction_count < MAX_TRANSACTIONS)
-        {
-            // Transactions section
-            char description[MAX_NAME_LEN] = {0};
-            double amount = 0.0;
-            int category_id = 0;
-            char date[11] = {0};
-
-            // Parse the transaction line
-            char *ptr = line;
-
-            // Handle quoted fields (for descriptions with commas)
-            if (line[0] == '"')
-            {
-                int i = 1;
-                int j = 0;
-                // Extract text until the closing quote
-                while (line[i] != '"' && line[i] != '\0' && j < MAX_NAME_LEN - 1)
-                {
-                    description[j++] = line[i++];
-                }
-                description[j] = '\0';
-
-                // Skip to the comma after the closing quote
-                while (line[i] != ',' && line[i] != '\0')
-                {
-                    i++;
-                }
-
-                // Skip the comma
-                if (line[i] == ',')
-                {
-                    i++;
-                }
-
-                // Parse remaining fields
-                ptr = line + i;
-            }
-            else
-            {
-                // Simple case: no quotes
-                char *comma = strchr(ptr, ',');
-                if (comma)
-                {
-                    int desc_len = comma - ptr;
-                    if (desc_len > MAX_NAME_LEN - 1)
-                    {
-                        desc_len = MAX_NAME_LEN - 1;
-                    }
-                    strncpy(description, ptr, desc_len);
-                    description[desc_len] = '\0';
-
-                    ptr = comma + 1;
-                }
-            }
-
-            // Parse amount
-            char *comma = strchr(ptr, ',');
-            if (comma)
-            {
-                char amount_str[32] = {0};
-                int amount_len = comma - ptr;
-                if (amount_len < 32)
-                {
-                    strncpy(amount_str, ptr, amount_len);
-                    amount_str[amount_len] = '\0';
-                    amount = atof(amount_str);
-                }
-
-                ptr = comma + 1;
-            }
-
-            // Parse category_id
-            comma = strchr(ptr, ',');
-            if (comma)
-            {
-                char cat_id_str[16] = {0};
-                int cat_id_len = comma - ptr;
-                if (cat_id_len < 16)
-                {
-                    strncpy(cat_id_str, ptr, cat_id_len);
-                    cat_id_str[cat_id_len] = '\0';
-                    category_id = atoi(cat_id_str);
-                }
-
-                ptr = comma + 1;
-            }
-
-            // Parse date
-            if (strlen(ptr) > 0)
-            {
-                strncpy(date, ptr, 10);
-                date[10] = '\0';
-            }
-
-            // Store in transaction array
-            if (strlen(description) > 0)
-            {
-                strncpy(transactions[transaction_count].description, description, MAX_NAME_LEN - 1);
-                transactions[transaction_count].description[MAX_NAME_LEN - 1] = '\0';
-                transactions[transaction_count].amount = amount;
-                transactions[transaction_count].category_id = category_id;
-                strncpy(transactions[transaction_count].date, date, 10);
-                transactions[transaction_count].date[10] = '\0';
-                transaction_count++;
-            }
-        }
+        // Invalid file format
+        fclose(file);
+        return -2;
     }
-
+    
+    // Read version
+    int version;
+    if (fread(&version, sizeof(int), 1, file) != 1 || version != 1)
+    {
+        // Unsupported version
+        fclose(file);
+        return -1;
+    }
+    
+    // Read total budget
+    if (fread(&total_budget, sizeof(double), 1, file) != 1)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Read category count
+    if (fread(&category_count, sizeof(int), 1, file) != 1)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Validate category count to prevent buffer overflow
+    if (category_count > MAX_CATEGORIES || category_count < 0)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Read all categories at once
+    if (fread(categories, sizeof(Category), category_count, file) != (size_t)category_count)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Read transaction count
+    if (fread(&transaction_count, sizeof(int), 1, file) != 1)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Validate transaction count to prevent buffer overflow
+    if (transaction_count > MAX_TRANSACTIONS || transaction_count < 0)
+    {
+        fclose(file);
+        return -1;
+    }
+    
+    // Read all transactions at once
+    if (fread(transactions, sizeof(Transaction), transaction_count, file) != (size_t)transaction_count)
+    {
+        fclose(file);
+        return -1;
+    }
+    
     fclose(file);
+    return 1;
 }
 
 char *get_home_directory() {

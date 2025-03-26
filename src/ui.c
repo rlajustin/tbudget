@@ -57,8 +57,8 @@ BoundedWindow draw_bounded(int height, int width, int start_y, int start_x, bool
 
 BoundedWindow draw_bounded_with_title(int height, int width, int start_y, int start_x, const char *title, bool highlight, int alignment)
 {
-  WINDOW *dialog = newwin(height - 4, width - 4, start_y + 2, start_x + 2);
-  WINDOW *boundary = newwin(height, width, start_y, start_x);
+  WINDOW *dialog = newwin(height, width, start_y, start_x);
+  WINDOW *boundary = newwin(height + 4, width + 4, start_y - 2, start_x - 2);
   if (highlight)
   {
     wattron(boundary, A_BOLD | COLOR_PAIR(4));
@@ -167,8 +167,14 @@ void destroy_bounded(BoundedWindow win)
 // does not trigger refresh
 void delete_bounded(BoundedWindow win)
 {
-  delwin(win.boundary);
-  delwin(win.textbox);
+  if (win.boundary != NULL)
+  {
+    delwin(win.boundary);
+  }
+  if (win.textbox != NULL)
+  {
+    delwin(win.textbox);
+  }
 }
 
 void bwresize(BoundedWindow win, int height, int width)
@@ -206,7 +212,7 @@ int get_confirmation(WINDOW *win, const char *message[], int item_count)
 
   while (1)
   {
-    draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 2);
+    draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 3);
     wrefresh(win);
 
     int ch = wgetch(win);
@@ -556,15 +562,15 @@ int get_transaction_choice(WINDOW *win, const Transaction transactions[], int tr
   return -1; // @dev this should never happen
 }
 
-int get_input(WINDOW *win, void *value, char *prompt, int max_len, int y, InputType type)
+int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType type)
 {
   int ch;
   int pos = 0;
-  wmove(win, y, 0);
+  int y, x;
+  getyx(win, y, x);
   wclrtoeol(win);
   mvwprintw(win, y, 0, "%s", prompt);
-  int x = strlen(prompt);
-  int cursor_x = x;
+  x += strlen(prompt);
   char buffer[max_len];
   buffer[0] = '\0';
 
@@ -601,7 +607,7 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, int y, InputT
 
   mvwprintw(win, y, x, "%s", buffer);
   pos = strlen(buffer);
-  cursor_x = x + pos;
+  int cursor_x = x + pos;
 
   wmove(win, y, cursor_x);
 
@@ -740,17 +746,24 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, int y, InputT
   }
 
   wrefresh(win);
+  wmove(win, y + 1, 0);
+  wclrtoeol(win);
 
   curs_set(0);
   return 1;
 }
 
 // Function to get date input with improved UX
-int get_date_input(WINDOW *win, char *date_buffer, int y, int x)
+int get_date_input(WINDOW *win, char *date_buffer, char* prompt)
 {
   int ch;
   int highlighted_field = 0;           // 0 = day, 1 = month, 2 = year, 3 = "Today" button
   int cursor_positions[3] = {0, 3, 6}; // Positions for DD-MM-YYYY
+  int y, x;
+  getyx(win, y, x);
+
+  mvwprintw(win, y, x, "%s", prompt);
+  x += strlen(prompt);
 
   // Enable keypad mode for this window to properly detect arrow keys
   keypad(win, TRUE);
@@ -990,33 +1003,43 @@ void display_categories(WINDOW *win, int start_y)
 {
   int y = start_y;
 
-  mvwprintw(win, y++, 2, "%-30s %-15s %-15s", "Category", "Amount", "Percentage");
-  mvwprintw(win, y++, 2, "-------------------------------------------------------");
+  mvwprintw(win, y++, 2, "%-30s %-15s %-15s %-15s", "Category", "Budget", "Spent", "Percentage");
+  mvwprintw(win, y++, 2, "-------------------------------------------------------------------");
 
   double total_allocated = 0.0;
-  for (int i = 0; i < category_count; i++)
-  {
-    total_allocated += categories[i].amount;
-  }
+  double total_spent = 0.0;
 
   for (int i = 0; i < category_count; i++)
   {
+    total_allocated += categories[i].budget;
+    total_spent += categories[i].spent;
     double percentage = 0.0;
-    if (total_budget > 0)
+    if (categories[i].budget > 0)
     {
-      percentage = (categories[i].amount / total_budget) * 100.0;
+      percentage = (categories[i].spent / categories[i].budget) * 100.0;
     }
 
-    mvwprintw(win, y++, 2, "%-30s $%-14.2f %.2f%%",
-              categories[i].name, categories[i].amount, percentage);
+    char name[MAX_NAME_LEN];
+    if (strlen(categories[i].name) > 29)
+    {
+      strncpy(name, categories[i].name, 26);
+      name[26] = '\0';
+      strcat(name, "...");
+    }
+    else
+    {
+      strcpy(name, categories[i].name);
+    }
+
+    mvwprintw(win, y++, 2, "%-30s $%-14.2f $%-14.2f %.2f%%",
+              name, categories[i].budget, categories[i].spent, percentage);
   }
 
   mvwprintw(win, y++, 2, "-------------------------------------------------------");
-  mvwprintw(win, y++, 2, "%-30s $%-14.2f %.2f%%",
-            "Total Allocated", total_allocated,
-            total_budget > 0 ? (total_allocated / total_budget) * 100.0 : 0.0);
+  mvwprintw(win, y++, 2, "%-30s $%-14.2f",
+            "Total Allocated", total_allocated);
 
-  double remaining = total_budget - total_allocated;
+  double remaining = total_allocated - total_spent;
   if (remaining >= 0)
   {
     wattron(win, COLOR_PAIR(2));
@@ -1026,9 +1049,8 @@ void display_categories(WINDOW *win, int start_y)
     wattron(win, COLOR_PAIR(3));
   }
 
-  mvwprintw(win, y++, 2, "%-30s $%-14.2f %.2f%%",
-            "Remaining Unallocated", remaining,
-            total_budget > 0 ? (remaining / total_budget) * 100.0 : 0.0);
+  mvwprintw(win, y++, 2, "%-30s $%-14.2f",
+            "Remaining This Month", remaining);
 
   if (remaining >= 0)
   {

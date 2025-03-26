@@ -18,7 +18,7 @@ void write_export_content(FILE *export_file);
 void export_data_to_csv(int silent);
 void import_data_from_csv(const char *filename);
 void save_data_to_file();
-void load_data_from_file();
+int load_data_from_file();
 char *get_home_directory();
 int create_directory_if_not_exists(const char *path);
 void initialize_data_directories();

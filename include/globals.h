@@ -27,7 +27,9 @@
 typedef struct
 {
     char name[MAX_NAME_LEN];
-    double amount;
+    double budget;
+    double spent;
+    double bonus;
 } Category;
 
 typedef struct

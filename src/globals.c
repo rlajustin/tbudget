@@ -11,4 +11,4 @@ double total_budget = 0.0;
 char app_data_dir[MAX_BUFFER];
 char data_storage_dir[MAX_BUFFER];
 char data_file_path[MAX_BUFFER];
-char export_file_path[MAX_BUFFER]; 
+char export_file_path[MAX_BUFFER];

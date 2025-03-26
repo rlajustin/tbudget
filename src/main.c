@@ -94,13 +94,24 @@ int main(int argc, char *argv[])
             }
         }
     }
+    else
+    {
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    initialize_data_directories();
+    int load_result = load_data_from_file();
+    if (load_result < 0)
+    {
+        fprintf(stderr, "Error: Failed to load data from file: %d\n", load_result);
+        return 1;
+    }
 
     // Initialize data directories
-    initialize_data_directories();
     setup_ncurses();
 
     // Load data from file at startup
-    load_data_from_file();
 
     // Run the appropriate mode
     if (mode == MODE_MENU)
@@ -112,6 +123,7 @@ int main(int argc, char *argv[])
         run_dashboard_mode();
     }
 
+    curs_set(1);
     cleanup_ncurses();
     save_data_to_file();
 
@@ -185,16 +197,14 @@ void run_dashboard_mode()
 
     // Calculate window sizes
     int budget_height = max_y / 2;
-    int trans_height = max_y - budget_height - 1; // -1 for title bar
+    int trans_height = max_y - budget_height - 1; // -1 for title bar and bottom bar
     int action_width = max_x / 3;
 
     // Define active section (0 = budget, 1 = transactions, 2 = actions)
     int active_section = 2; // Start with actions menu
 
     // Create sub-windows
-    BoundedWindow budget_win = draw_bounded_with_title(budget_height, max_x - action_width, 1, 0, "Budget Summary", active_section == 0, ALIGN_LEFT);
-    BoundedWindow trans_win = draw_bounded_with_title(trans_height, max_x - action_width, budget_height + 1, 0, "Transaction History", active_section == 1, ALIGN_LEFT);
-    BoundedWindow action_win = draw_bounded_with_title(max_y - 1, action_width, 1, max_x - action_width, "Actions", active_section == 2, ALIGN_LEFT);
+    BoundedWindow budget_win, trans_win, action_win;
 
     // Prepare action menu
     const char *action_menu[] = {
@@ -231,9 +241,9 @@ void run_dashboard_mode()
             delete_bounded(trans_win);
             delete_bounded(action_win);
 
-            budget_win = draw_bounded_with_title(budget_height, max_x - action_width, 1, 0, " Budget Summary ", active_section == 0, ALIGN_LEFT);
-            trans_win = draw_bounded_with_title(trans_height, max_x - action_width, budget_height + 1, 0, " Transaction History ", active_section == 1, ALIGN_LEFT);
-            action_win = draw_bounded_with_title(max_y - 2, action_width, 1, max_x - action_width, " Actions ", active_section == 2, ALIGN_LEFT);
+            budget_win = draw_bounded_with_title(budget_height - 4, max_x - action_width - 4, 3, 2, "Budget Summary", active_section == 0, ALIGN_LEFT);
+            trans_win = draw_bounded_with_title(trans_height - 4, max_x - action_width - 4, budget_height + 3, 2, "Transaction History", active_section == 1, ALIGN_LEFT);
+            action_win = draw_bounded_with_title(max_y - 6, action_width - 4, 3, max_x - action_width + 2, "Actions", active_section == 2, ALIGN_LEFT);
 
             // Key help line
             char *help_text = is_leaving ? "Exiting TBudget, press Q again to confirm" : "TAB to switch sections | ENTER to select | Q to quit";
@@ -349,6 +359,11 @@ void run_dashboard_mode()
                 highlighted_action++;
                 needs_redraw = true;
             }
+            else
+            {
+                active_section = (active_section + 1) % 3;
+                needs_redraw = true;
+            }
             break;
 
         case 'k':
@@ -356,6 +371,11 @@ void run_dashboard_mode()
             if (active_section == 2 && highlighted_action > 0)
             {
                 highlighted_action--;
+                needs_redraw = true;
+            }
+            else
+            {
+                active_section = (active_section + 2) % 3;
                 needs_redraw = true;
             }
             break;
@@ -372,23 +392,13 @@ void run_dashboard_mode()
                     break;
 
                 case 1: // Remove Category
-                    if (category_count > 0)
-                    {
-                        remove_category_dialog();
-                        needs_redraw = true;
-                    }
+                    remove_category_dialog();
+                    needs_redraw = true;
                     break;
 
                 case 2: // Add Transaction
-                    if (category_count > 0)
-                    {
-                        add_transaction_dialog();
-                        needs_redraw = true;
-                    }
-                    else
-                    {
-                        draw_error(action_win, "Please create categories first.");
-                    }
+                    add_transaction_dialog();
+                    needs_redraw = true;
                     break;
 
                 case 3: // Remove Transaction
