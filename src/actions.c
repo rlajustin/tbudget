@@ -14,14 +14,16 @@ void add_category_dialog()
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
+    WINDOW *boundary = newwin(dialog_height + 4, dialog_width + 4, start_y - 2, start_x - 2);
+    box(boundary, 0, 0);
+    mvwprintw(boundary, 0, (dialog_width - 13) / 2, " Add Category ");
+    wnoutrefresh(boundary);
     WINDOW *dialog = newwin(dialog_height, dialog_width, start_y, start_x);
-    box(dialog, 0, 0);
-    mvwprintw(dialog, 0, (dialog_width - 13) / 2, " Add Category ");
 
     if (category_count >= MAX_CATEGORIES)
     {
-        mvwprintw(dialog, 2, 2, "Maximum number of categories reached.");
-        mvwprintw(dialog, 3, 2, "Press any key to continue...");
+        mvwprintw(dialog, 0, 0, "Maximum number of categories reached.");
+        mvwprintw(dialog, 1, 0, "Press any key to continue...");
         wnoutrefresh(dialog);
         doupdate();
         getch();
@@ -33,12 +35,13 @@ void add_category_dialog()
     }
 
     // Get category name
-    mvwprintw(dialog, 2, 2, "Enter category name: ");
-    mvwprintw(dialog, 3, 2, " ");
+    mvwprintw(dialog, 0, 0, "Enter category name: ");
+    int x, y;
     wnoutrefresh(dialog);
-    doupdate();
+    // doupdate();
 
-    if (!get_string_input(dialog, categories[category_count].name, MAX_NAME_LEN, 2, 22))
+    getyx(dialog, y, x);
+    if (!get_input(dialog, categories[category_count].name, MAX_NAME_LEN, y, x, INPUT_STRING))
     {
         delwin(dialog);
         touchwin(stdscr);
@@ -48,12 +51,15 @@ void add_category_dialog()
     }
 
     // Get amount
-    mvwprintw(dialog, 5, 2, "Enter allocated amount: ");
-    mvwprintw(dialog, 6, 2, "$");
+    mvwprintw(dialog, 3, 0, "Enter allocated amount: $");
     wnoutrefresh(dialog);
-    doupdate();
 
-    double amount = get_double_input(dialog, 6, 4);
+    getyx(dialog, y, x);
+    double amount = -1.0;
+    if (get_input(dialog, &amount, MAX_BUFFER, y, x, INPUT_DOUBLE) == 0)
+    {
+        amount = -1.0; // Ensure -1.0 is returned if user cancels
+    }
 
     // Check if input was canceled
     if (amount == -1.0)
@@ -249,8 +255,9 @@ void set_budget_dialog()
     int start_x = (max_x - dialog_width) / 2;
 
     WINDOW *dialog = newwin(dialog_height, dialog_width, start_y, start_x);
-    box(dialog, 0, 0);
-    mvwprintw(dialog, 0, (dialog_width - 17) / 2, " Set Total Budget ");
+    WINDOW *border = newwin(dialog_height + 2, dialog_width + 2, start_y - 1, start_x - 1);
+    box(border, 0, 0);
+    mvwprintw(border, 0, (dialog_width - 17) / 2, " Set Total Budget ");
 
     mvwprintw(dialog, 2, 2, "Current Budget: $%.2f", total_budget);
     mvwprintw(dialog, 3, 2, "Enter new total budget amount: ");
@@ -258,12 +265,17 @@ void set_budget_dialog()
     wnoutrefresh(dialog);
     doupdate();
 
-    double new_budget = get_double_input(dialog, 4, 4);
+    double new_budget = -1.0;
+    if (get_input(dialog, &new_budget, MAX_BUFFER, 4, 4, INPUT_DOUBLE) == 0)
+    {
+        new_budget = -1.0; // Ensure -1.0 is returned if user cancels
+    }
 
     // Check if input was canceled
     if (new_budget == -1.0)
     {
         delwin(dialog);
+        delwin(border);
         touchwin(stdscr);
         wnoutrefresh(stdscr);
         doupdate();
@@ -279,6 +291,7 @@ void set_budget_dialog()
     getch();
 
     delwin(dialog);
+    delwin(border);
     touchwin(stdscr);
     wnoutrefresh(stdscr);
     doupdate();
@@ -359,7 +372,7 @@ void add_transaction_dialog()
     mvwprintw(dialog, 3, 2, " ");
     wrefresh(dialog);
 
-    if (!get_string_input(dialog, new_transaction.description, MAX_NAME_LEN, 2, 33))
+    if (!get_input(dialog, new_transaction.description, MAX_NAME_LEN, 2, 33, INPUT_STRING))
     {
         werase(dialog);
         wrefresh(dialog);
@@ -374,7 +387,11 @@ void add_transaction_dialog()
     mvwprintw(dialog, 6, 2, "$");
     wrefresh(dialog);
 
-    double amount = get_double_input(dialog, 6, 4);
+    double amount = -1.0;
+    if (get_input(dialog, &amount, MAX_BUFFER, 6, 4, INPUT_DOUBLE) == 0)
+    {
+        amount = -1.0; // Ensure -1.0 is returned if user cancels
+    }
 
     // Check if input was canceled
     if (amount == -1.0)

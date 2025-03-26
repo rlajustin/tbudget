@@ -138,11 +138,13 @@ int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int s
   }
 }
 
-int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
+int get_input(WINDOW *win, void *value, int max_len, int y, int x, InputType type)
 {
   int ch;
   int pos = 0;
   int cursor_x = x;
+  char buffer[max_len];
+  buffer[0] = '\0';
 
   // Enable keypad mode for this window to properly detect arrow keys
   keypad(win, TRUE);
@@ -150,32 +152,38 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
   // Turn on cursor
   curs_set(1);
 
-  // Calculate absolute positions within the dialog window
-  wmove(win, y, x);
-
-  // Get current cursor position in window
-  int cursor_y, temp_x;
-  getyx(win, cursor_y, temp_x);
-
-  // Clear the input area
-  for (int i = 0; i < max_len; i++)
+  // If value already has content, display it
+  if (type == INPUT_STRING)
   {
-    mvwaddch(win, cursor_y, x + i, ' ');
+    if (((char *)value)[0] != '\0')
+    {
+      strcpy(buffer, (char *)value);
+    }
+  }
+  else if (type == INPUT_DOUBLE)
+  {
+    if (*(double *)value != 0.0)
+    {
+      sprintf(buffer, "%.2f", *(double *)value);
+    }
+  }
+  else if (type == INPUT_INT)
+  {
+    if (*(int *)value != 0)
+    {
+      sprintf(buffer, "%d", *(int *)value);
+    }
   }
 
-  // If buffer already has content, display it
-  if (buffer[0] != '\0')
-  {
-    mvwprintw(win, cursor_y, x, "%s", buffer);
-    pos = strlen(buffer);
-    cursor_x = x + pos;
-  }
+  mvwprintw(win, y, x, "%s", buffer);
+  pos = strlen(buffer);
+  cursor_x = x + pos;
 
-  wmove(win, cursor_y, cursor_x);
-  wrefresh(win);
+  wmove(win, y, cursor_x);
 
   while (1)
   {
+    wrefresh(win);
     ch = wgetch(win);
 
     if (ch == '\n')
@@ -203,13 +211,10 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
         }
 
         // Redraw the input field
-        wmove(win, cursor_y, x);
-        for (int i = 0; i < max_len; i++)
-        {
-          waddch(win, ' ');
-        }
-        mvwprintw(win, cursor_y, x, "%s", buffer);
-        wmove(win, cursor_y, cursor_x);
+        wmove(win, y, x);
+        wclrtoeol(win);
+        mvwprintw(win, y, x, "%s", buffer);
+        wmove(win, y, cursor_x);
       }
     }
     else if (ch == KEY_LEFT)
@@ -218,7 +223,7 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
       {
         pos--;
         cursor_x--;
-        wmove(win, cursor_y, cursor_x);
+        wmove(win, y, cursor_x);
       }
     }
     else if (ch == KEY_RIGHT)
@@ -227,7 +232,7 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
       {
         pos++;
         cursor_x++;
-        wmove(win, cursor_y, cursor_x);
+        wmove(win, y, cursor_x);
       }
     }
     else if (ch == KEY_UP || ch == KEY_DOWN)
@@ -236,6 +241,40 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
     }
     else if (isprint(ch) && pos < max_len - 1)
     {
+      if (type == INPUT_DOUBLE)
+      {
+        if (isdigit(ch) || ch == '.' || ch == '-')
+        {
+          if (ch == '.' && strchr(buffer, '.') != NULL)
+          {
+            continue;
+          }
+
+          if (ch == '-' && pos != 0)
+          {
+            continue; // Minus sign only at beginning
+          }
+        }
+        else
+        {
+          continue;
+        }
+      }
+      else if (type == INPUT_INT)
+      {
+        if (isdigit(ch) || ch == '-')
+        {
+          if (ch == '-' && pos != 0)
+          {
+            continue; // Minus sign only at beginning
+          }
+        }
+        else
+        {
+          continue;
+        }
+      }
+
       // Shift characters to the right
       for (int i = strlen(buffer); i >= pos; i--)
       {
@@ -247,249 +286,39 @@ int get_string_input(WINDOW *win, char *buffer, int max_len, int y, int x)
       cursor_x++;
 
       // Redraw the input field
-      wmove(win, cursor_y, x);
-      for (int i = 0; i < max_len; i++)
-      {
-        waddch(win, ' ');
-      }
-      mvwprintw(win, cursor_y, x, "%s", buffer);
-      wmove(win, cursor_y, cursor_x);
+      wclrtoeol(win);
+      mvwprintw(win, y, x, "%s", buffer);
+      wmove(win, y, cursor_x);
     }
-
-    wrefresh(win);
   }
+
+  if (type == INPUT_DOUBLE)
+  {
+    double val = -1.0; // Default to -1 if conversion fails
+    if (buffer[0] != '\0')
+    {
+      val = atof(buffer);
+    }
+    *(double *)value = val;
+  }
+  else if (type == INPUT_INT)
+  {
+    int val = -1; // Default to -1 if conversion fails
+    if (buffer[0] != '\0')
+    {
+      val = atoi(buffer);
+    }
+    *(int *)value = val;
+  }
+  else
+  {
+    strcpy((char *)value, buffer);
+  }
+
+  wrefresh(win);
 
   curs_set(0);
   return 1;
-}
-
-// Function to get numeric input for a double value
-double get_double_input(WINDOW *win, int y, int x)
-{
-  char buffer[MAX_BUFFER] = {0}; // Buffer for user input
-  int pos = 0;                   // Current cursor position in buffer
-
-  // Turn on cursor
-  curs_set(1);
-
-  // If we already have a value, display it
-  wmove(win, y, x);
-  wrefresh(win);
-
-  noecho(); // Don't automatically echo characters
-
-  while (1)
-  {
-    int ch = wgetch(win);
-
-    if (ch == '\n')
-    {
-      buffer[pos] = '\0';
-      break;
-    }
-    else if (ch == 27)
-    { // Direct ESC key detection
-      curs_set(0);
-      return -1.0; // Signal cancellation
-    }
-    else if (ch == KEY_BACKSPACE || ch == 127 || ch == KEY_BACKSPACE_ALT)
-    {
-      if (pos > 0)
-      {
-        pos--;
-        mvwaddch(win, y, x + pos, ' ');
-        wmove(win, y, x + pos);
-        wrefresh(win);
-
-        // Shift characters to the left
-        for (int i = pos; i < (int)strlen(buffer); i++)
-        {
-          buffer[i] = buffer[i + 1];
-        }
-
-        // Redraw the input
-        wmove(win, y, x);
-        wclrtoeol(win);
-        mvwprintw(win, y, x, "%s", buffer);
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if (ch == KEY_LEFT)
-    {
-      if (pos > 0)
-      {
-        pos--;
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if (ch == KEY_RIGHT)
-    {
-      if (pos < (int)strlen(buffer))
-      {
-        pos++;
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if ((isdigit(ch) || ch == '.' || ch == '-') && pos < MAX_BUFFER - 1)
-    {
-      // Validate input (only allow one decimal point and ensure minus sign is at start)
-      bool valid = true;
-
-      if (ch == '.' && strchr(buffer, '.') != NULL)
-      {
-        valid = false; // Don't allow multiple decimal points
-      }
-
-      if (ch == '-' && pos != 0)
-      {
-        valid = false; // Minus sign only at beginning
-      }
-
-      if (valid)
-      {
-        // Shift characters to the right
-        for (int i = strlen(buffer); i >= pos; i--)
-        {
-          buffer[i + 1] = buffer[i];
-        }
-
-        buffer[pos] = ch;
-        pos++;
-
-        // Redraw the input
-        wmove(win, y, x);
-        wclrtoeol(win);
-        mvwprintw(win, y, x, "%s", buffer);
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-  }
-
-  // Convert to double
-  double value = -1.0; // Default to -1 if conversion fails
-  if (buffer[0] != '\0')
-  {
-    value = atof(buffer);
-  }
-
-  curs_set(0);
-  return value;
-}
-
-// Function to get integer input
-int get_int_input(WINDOW *win, int y, int x)
-{
-  char buffer[MAX_BUFFER] = {0}; // Buffer for user input
-  int pos = 0;                   // Current cursor position in buffer
-
-  // Turn on cursor
-  curs_set(1);
-
-  // If we already have a value, display it
-  wmove(win, y, x);
-  wrefresh(win);
-
-  noecho(); // Don't automatically echo characters
-
-  while (1)
-  {
-    int ch = wgetch(win);
-
-    if (ch == '\n')
-    {
-      buffer[pos] = '\0';
-      break;
-    }
-    else if (ch == 27)
-    { // Direct ESC key detection
-      curs_set(0);
-      return -1; // Signal cancellation
-    }
-    else if (ch == KEY_BACKSPACE || ch == 127 || ch == KEY_BACKSPACE_ALT)
-    {
-      if (pos > 0)
-      {
-        pos--;
-        mvwaddch(win, y, x + pos, ' ');
-        wmove(win, y, x + pos);
-        wrefresh(win);
-
-        // Shift characters to the left
-        for (int i = pos; i < (int)strlen(buffer); i++)
-        {
-          buffer[i] = buffer[i + 1];
-        }
-
-        // Redraw the input
-        wmove(win, y, x);
-        wclrtoeol(win);
-        mvwprintw(win, y, x, "%s", buffer);
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if (ch == KEY_LEFT)
-    {
-      if (pos > 0)
-      {
-        pos--;
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if (ch == KEY_RIGHT)
-    {
-      if (pos < (int)strlen(buffer))
-      {
-        pos++;
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-    else if ((isdigit(ch) || ch == '-') && pos < MAX_BUFFER - 1)
-    {
-      // Validate input (only allow minus sign at start)
-      bool valid = true;
-
-      if (ch == '-' && pos != 0)
-      {
-        valid = false; // Minus sign only at beginning
-      }
-
-      if (valid)
-      {
-        // Shift characters to the right
-        for (int i = strlen(buffer); i >= pos; i--)
-        {
-          buffer[i + 1] = buffer[i];
-        }
-
-        buffer[pos] = ch;
-        pos++;
-
-        // Redraw the input
-        wmove(win, y, x);
-        wclrtoeol(win);
-        mvwprintw(win, y, x, "%s", buffer);
-        wmove(win, y, x + pos);
-        wrefresh(win);
-      }
-    }
-  }
-
-  // Convert to int
-  int value = -1; // Default to -1 if conversion fails
-  if (buffer[0] != '\0')
-  {
-    value = atoi(buffer);
-  }
-
-  curs_set(0);
-  return value;
 }
 
 // Function to get date input with improved UX
@@ -858,7 +687,7 @@ void display_transactions(WINDOW *win, int start_y)
 
 // Helper function to format and display the date
 void format_date(WINDOW *win, int y, int x, int day, int month, int year,
-                        int highlighted_field, int cursor_positions[])
+                 int highlighted_field, int cursor_positions[])
 {
   // Ensure day is valid for current month/year
   day = validate_day(day, month, year);

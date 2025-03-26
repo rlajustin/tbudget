@@ -1,4 +1,4 @@
-# TBudget
+# tbudget
 
 A simple TUI budget management application designed for you know exactly the type of person you are if you are at all interested in this application which solves a nonexistent problem. Built with ncurses and probably like 100 Cursor calls to claude-3.7 since the C language is too hard for me. Built and tested on Apple silicon so compatibility mileage may vary. If you find a bug and fix it that would be nice. Assume the rest of this readme was AI-generated.
 
