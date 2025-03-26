@@ -97,7 +97,6 @@ int main(int argc, char *argv[])
 
     // Initialize data directories
     initialize_data_directories();
-
     setup_ncurses();
 
     // Load data from file at startup
@@ -114,8 +113,6 @@ int main(int argc, char *argv[])
     }
 
     cleanup_ncurses();
-
-    // Save data to file before exit
     save_data_to_file();
 
     return 0;
@@ -191,13 +188,13 @@ void run_dashboard_mode()
     int trans_height = max_y - budget_height - 1; // -1 for title bar
     int action_width = max_x / 3;
 
-    // Create sub-windows
-    WINDOW *budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-    WINDOW *trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-    WINDOW *action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
-
     // Define active section (0 = budget, 1 = transactions, 2 = actions)
     int active_section = 2; // Start with actions menu
+
+    // Create sub-windows
+    BoundedWindow budget_win = draw_bounded_with_title(budget_height, max_x - action_width, 1, 0, "Budget Summary", active_section == 0, ALIGN_LEFT);
+    BoundedWindow trans_win = draw_bounded_with_title(trans_height, max_x - action_width, budget_height + 1, 0, "Transaction History", active_section == 1, ALIGN_LEFT);
+    BoundedWindow action_win = draw_bounded_with_title(max_y - 1, action_width, 1, max_x - action_width, "Actions", active_section == 2, ALIGN_LEFT);
 
     // Prepare action menu
     const char *action_menu[] = {
@@ -211,127 +208,122 @@ void run_dashboard_mode()
     int action_menu_size = sizeof(action_menu) / sizeof(action_menu[0]);
     int highlighted_action = 0;
 
-    // Key help line
-    const char *help_text = "TAB to switch sections | ENTER to select | Q to quit";
-
     // Turn off cursor
     curs_set(0);
-
-    // Initial draw of the screen
     clear();
     draw_title(win, "TBudget Dashboard - Budget Management Tool");
 
-    // Calculate sizes in case of window resize
-    getmaxyx(win, max_y, max_x);
-    budget_height = max_y / 2;
-    trans_height = max_y - budget_height - 1;
-    action_width = max_x / 3;
+    bool needs_redraw = true;
+    bool is_leaving = false;
 
-    // Adjust window sizes and positions
-    wresize(budget_win, budget_height, max_x - action_width);
-    wresize(trans_win, trans_height, max_x - action_width);
-    wresize(action_win, max_y - 1, action_width);
-    mvwin(trans_win, budget_height + 1, 0);
-    mvwin(action_win, 1, max_x - action_width);
-
-    // Display help line at the bottom
-    mvprintw(max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
-
-    // Clear sub-windows
-    wclear(budget_win);
-    wclear(trans_win);
-    wclear(action_win);
-
-    // Draw borders with highlighted active section
-    if (active_section == 0)
+    // Main dashboard loop
+    while (1)
     {
-        wattron(budget_win, A_BOLD | COLOR_PAIR(4));
-    }
-    box(budget_win, 0, 0);
-    if (active_section == 0)
-    {
-        wattroff(budget_win, A_BOLD | COLOR_PAIR(4));
-    }
-
-    if (active_section == 1)
-    {
-        wattron(trans_win, A_BOLD | COLOR_PAIR(4));
-    }
-    box(trans_win, 0, 0);
-    if (active_section == 1)
-    {
-        wattroff(trans_win, A_BOLD | COLOR_PAIR(4));
-    }
-
-    if (active_section == 2)
-    {
-        wattron(action_win, A_BOLD | COLOR_PAIR(4));
-    }
-    box(action_win, 0, 0);
-    if (active_section == 2)
-    {
-        wattroff(action_win, A_BOLD | COLOR_PAIR(4));
-    }
-
-    // Draw window titles
-    mvwprintw(budget_win, 0, 2, " Budget Summary ");
-    mvwprintw(trans_win, 0, 2, " Transaction History ");
-    mvwprintw(action_win, 0, 2, " Actions ");
-
-    // Display budget summary
-    mvwprintw(budget_win, 1, 2, "Total Budget: $%.2f", total_budget);
-    if (category_count > 0)
-    {
-        display_categories(budget_win, 3);
-    }
-    else
-    {
-        mvwprintw(budget_win, 3, 2, "No budget categories defined yet.");
-        mvwprintw(budget_win, 4, 2, "Select 'Add Category' from the Actions menu.");
-    }
-
-    // Display transaction history
-    if (transaction_count > 0)
-    {
-        display_transactions(trans_win, 1);
-    }
-    else
-    {
-        mvwprintw(trans_win, 1, 2, "No transactions recorded yet.");
-        mvwprintw(trans_win, 2, 2, "Select 'Add Transaction' from the Actions menu.");
-    }
-
-    // Display action menu
-    for (int i = 0; i < action_menu_size; i++)
-    {
-        if (active_section == 2 && i == highlighted_action)
+        if (needs_redraw)
         {
-            wattron(action_win, COLOR_PAIR(4));
-            mvwprintw(action_win, 2 + i, 2, "%s", action_menu[i]);
-            wattroff(action_win, COLOR_PAIR(4));
+            // Recalculate sizes in case of window resize
+            getmaxyx(win, max_y, max_x);
+            budget_height = max_y / 2;
+            trans_height = max_y - budget_height - 2;
+            action_width = max_x / 3;
+
+            delete_bounded(budget_win);
+            delete_bounded(trans_win);
+            delete_bounded(action_win);
+
+            budget_win = draw_bounded_with_title(budget_height, max_x - action_width, 1, 0, " Budget Summary ", active_section == 0, ALIGN_LEFT);
+            trans_win = draw_bounded_with_title(trans_height, max_x - action_width, budget_height + 1, 0, " Transaction History ", active_section == 1, ALIGN_LEFT);
+            action_win = draw_bounded_with_title(max_y - 2, action_width, 1, max_x - action_width, " Actions ", active_section == 2, ALIGN_LEFT);
+
+            // Key help line
+            char *help_text = is_leaving ? "Exiting TBudget, press Q again to confirm" : "TAB to switch sections | ENTER to select | Q to quit";
+
+            // Adjust window sizes and positions
+            // bwresize(budget_win, budget_height, max_x - action_width);
+            // bwresize(trans_win, trans_height, max_x - action_width);
+            // bwresize(action_win, max_y - 1, action_width);
+            // bwmove(trans_win, budget_height + 1, 0);
+            // bwmove(action_win, 1, max_x - action_widtfh);
+
+            // Display help line at the bottom
+            mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
+            mvprintw(max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
+
+            // Display budget summary
+            mvwprintw(budget_win.textbox, 1, 2, "Total Budget: $%.2f", total_budget);
+            if (category_count > 0)
+            {
+                display_categories(budget_win.textbox, 3);
+            }
+            else
+            {
+                mvwprintw(budget_win.textbox, 3, 2, "No budget categories defined yet.");
+                mvwprintw(budget_win.textbox, 4, 2, "Select 'Add Category' from the Actions menu.");
+            }
+
+            // Display transaction history
+            if (transaction_count > 0)
+            {
+                display_transactions(trans_win.textbox, 1);
+            }
+            else
+            {
+                mvwprintw(trans_win.textbox, 1, 2, "No transactions recorded yet.");
+                mvwprintw(trans_win.textbox, 2, 2, "Select 'Add Transaction' from the Actions menu.");
+            }
+
+            // Display action menu
+            for (int i = 0; i < action_menu_size; i++)
+            {
+                if (active_section == 2 && i == highlighted_action)
+                {
+                    wattron(action_win.textbox, COLOR_PAIR(4));
+                    mvwprintw(action_win.textbox, 2 + i, 2, "%d. %s", i + 1, action_menu[i]);
+                    wattroff(action_win.textbox, COLOR_PAIR(4));
+                }
+                else
+                {
+                    mvwprintw(action_win.textbox, 2 + i, 2, "%d. %s", i + 1, action_menu[i]);
+                }
+            }
+
+            // Refresh windows
+            wnoutrefresh(win);
+            bwnoutrefresh(budget_win);
+            bwnoutrefresh(trans_win);
+            bwnoutrefresh(action_win);
+            doupdate();
+            needs_redraw = false;
+        }
+
+        // Get user input
+        ch = getch();
+
+        if (ch == 'q' || ch == 'Q')
+        {
+            if (is_leaving)
+            {
+                delete_bounded(budget_win);
+                delete_bounded(trans_win);
+                delete_bounded(action_win);
+                return;
+            }
+            else
+            {
+                is_leaving = true;
+                needs_redraw = true;
+                continue;
+            }
         }
         else
         {
-            mvwprintw(action_win, 2 + i, 2, "%s", action_menu[i]);
+            if (is_leaving)
+            {
+                is_leaving = false;
+                needs_redraw = true;
+                continue;
+            }
         }
-    }
-
-    // Initial refresh of windows
-    wnoutrefresh(budget_win);
-    wnoutrefresh(trans_win);
-    wnoutrefresh(action_win);
-    wnoutrefresh(win);
-    // Do a single update of the physical screen - reduces flicker
-    doupdate();
-
-    // Main dashboard loop
-    bool needs_redraw = false;
-
-    while (1)
-    {
-        // Get user input
-        ch = getch();
-        needs_redraw = false;
 
         // Handle navigation between sections
         switch (ch)
@@ -374,35 +366,15 @@ void run_dashboard_mode()
                 // Handle action menu selection
                 switch (highlighted_action)
                 {
-                case 0: // Add Category
-                    delwin(budget_win);
-                    delwin(trans_win);
-                    delwin(action_win);
-
-                    // Call a modified version of the category add functionality
+                case 0:
                     add_category_dialog();
-
-                    // Recreate windows
-                    budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-                    trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-                    action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
                     needs_redraw = true;
                     break;
 
                 case 1: // Remove Category
                     if (category_count > 0)
                     {
-                        delwin(budget_win);
-                        delwin(trans_win);
-                        delwin(action_win);
-
-                        // Call a modified version of the category remove functionality
                         remove_category_dialog();
-
-                        // Recreate windows
-                        budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-                        trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-                        action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
                         needs_redraw = true;
                     }
                     break;
@@ -410,233 +382,62 @@ void run_dashboard_mode()
                 case 2: // Add Transaction
                     if (category_count > 0)
                     {
-                        delwin(budget_win);
-                        delwin(trans_win);
-                        delwin(action_win);
-
-                        // Call a modified version of the transaction add functionality
                         add_transaction_dialog();
-
-                        // Recreate windows
-                        budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-                        trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-                        action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
                         needs_redraw = true;
                     }
                     else
                     {
-                        // Show error if no categories defined
-                        wclear(action_win);
-                        box(action_win, 0, 0);
-                        mvwprintw(action_win, 0, 2, " Error ");
-                        mvwprintw(action_win, 2, 2, "Please create categories first.");
-                        mvwprintw(action_win, 3, 2, "Press any key to continue...");
-                        wnoutrefresh(action_win);
-                        doupdate();
-                        getch();
-                        needs_redraw = true;
+                        draw_error(action_win, "Please create categories first.");
                     }
                     break;
 
                 case 3: // Remove Transaction
                     if (transaction_count > 0)
                     {
-                        delwin(budget_win);
-                        delwin(trans_win);
-                        delwin(action_win);
-
-                        // Call the transaction remove functionality
                         remove_transaction_dialog();
-
-                        // Recreate windows
-                        budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-                        trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-                        action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
                         needs_redraw = true;
                     }
                     else
                     {
-                        // Show error if no transactions defined
-                        wclear(action_win);
-                        box(action_win, 0, 0);
-                        mvwprintw(action_win, 0, 2, " Error ");
-                        mvwprintw(action_win, 2, 2, "No transactions to remove.");
-                        mvwprintw(action_win, 3, 2, "Press any key to continue...");
-                        wnoutrefresh(action_win);
-                        doupdate();
-                        getch();
-                        needs_redraw = true;
+                        draw_error(action_win, "No transactions to remove.");
                     }
                     break;
 
                 case 4: // Set Total Budget
-                    delwin(budget_win);
-                    delwin(trans_win);
-                    delwin(action_win);
-
-                    // Call a modified version of setting the total budget
                     set_budget_dialog();
-
-                    // Recreate windows
-                    budget_win = newwin(budget_height, max_x - action_width, 1, 0);
-                    trans_win = newwin(trans_height, max_x - action_width, budget_height + 1, 0);
-                    action_win = newwin(max_y - 1, action_width, 1, max_x - action_width);
                     needs_redraw = true;
                     break;
 
                 case 5: // Export to CSV
-                    wclear(action_win);
-                    box(action_win, 0, 0);
-                    mvwprintw(action_win, 0, 2, " Export ");
-                    mvwprintw(action_win, 2, 2, "Exporting data...");
-                    wnoutrefresh(action_win);
+                {
+                    const char *export_msg[] = {"This may take a while..."};
+                    BoundedWindow alert = draw_alert("Export to CSV", export_msg, 1);
                     doupdate();
 
                     // Export the data
                     export_data_to_csv(0);
 
-                    mvwprintw(action_win, 3, 2, "Data exported to:");
-                    mvwprintw(action_win, 4, 2, "%.30s", export_file_path);
-                    mvwprintw(action_win, 6, 2, "Press any key to continue...");
-                    wnoutrefresh(action_win);
-                    doupdate();
-                    getch();
+                    // Show the alert
+                    char export_path[MAX_BUFFER];
+                    sprintf(export_path, "Export complete! Exported to: %.30s", export_file_path);
+                    const char *export_path_msg[] = {export_path};
+                    draw_alert_persistent("Export to CSV", export_path_msg, 1);
+                    delete_bounded(alert);
                     needs_redraw = true;
                     break;
+                }
 
                 case 6: // Exit Dashboard
-                    delwin(budget_win);
-                    delwin(trans_win);
-                    delwin(action_win);
+                    delete_bounded(budget_win);
+                    delete_bounded(trans_win);
+                    delete_bounded(action_win);
                     return;
                 }
             }
             break;
-
-        case 'q':
-        case 'Q':
-            // Exit dashboard
-            delwin(budget_win);
-            delwin(trans_win);
-            delwin(action_win);
-            return;
-
         case KEY_RESIZE:
-            // Handle terminal resize
-            getmaxyx(win, max_y, max_x);
-            budget_height = max_y / 2;
-            trans_height = max_y - budget_height - 1;
-            action_width = max_x / 3;
             needs_redraw = true;
             break;
-        }
-
-        // Only redraw if something has changed
-        if (needs_redraw)
-        {
-            // Recalculate sizes in case of window resize
-            getmaxyx(win, max_y, max_x);
-            budget_height = max_y / 2;
-            trans_height = max_y - budget_height - 1;
-            action_width = max_x / 3;
-
-            // Adjust window sizes and positions
-            wresize(budget_win, budget_height, max_x - action_width);
-            wresize(trans_win, trans_height, max_x - action_width);
-            wresize(action_win, max_y - 1, action_width);
-            mvwin(trans_win, budget_height + 1, 0);
-            mvwin(action_win, 1, max_x - action_width);
-
-            // Display help line at the bottom
-            mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
-            mvprintw(max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
-
-            // Clear sub-windows
-            wclear(budget_win);
-            wclear(trans_win);
-            wclear(action_win);
-
-            // Draw borders with highlighted active section
-            if (active_section == 0)
-            {
-                wattron(budget_win, A_BOLD | COLOR_PAIR(4));
-            }
-            box(budget_win, 0, 0);
-            if (active_section == 0)
-            {
-                wattroff(budget_win, A_BOLD | COLOR_PAIR(4));
-            }
-
-            if (active_section == 1)
-            {
-                wattron(trans_win, A_BOLD | COLOR_PAIR(4));
-            }
-            box(trans_win, 0, 0);
-            if (active_section == 1)
-            {
-                wattroff(trans_win, A_BOLD | COLOR_PAIR(4));
-            }
-
-            if (active_section == 2)
-            {
-                wattron(action_win, A_BOLD | COLOR_PAIR(4));
-            }
-            box(action_win, 0, 0);
-            if (active_section == 2)
-            {
-                wattroff(action_win, A_BOLD | COLOR_PAIR(4));
-            }
-
-            // Draw window titles
-            mvwprintw(budget_win, 0, 2, " Budget Summary ");
-            mvwprintw(trans_win, 0, 2, " Transaction History ");
-            mvwprintw(action_win, 0, 2, " Actions ");
-
-            // Display budget summary
-            mvwprintw(budget_win, 1, 2, "Total Budget: $%.2f", total_budget);
-            if (category_count > 0)
-            {
-                display_categories(budget_win, 3);
-            }
-            else
-            {
-                mvwprintw(budget_win, 3, 2, "No budget categories defined yet.");
-                mvwprintw(budget_win, 4, 2, "Select 'Add Category' from the Actions menu.");
-            }
-
-            // Display transaction history
-            if (transaction_count > 0)
-            {
-                display_transactions(trans_win, 1);
-            }
-            else
-            {
-                mvwprintw(trans_win, 1, 2, "No transactions recorded yet.");
-                mvwprintw(trans_win, 2, 2, "Select 'Add Transaction' from the Actions menu.");
-            }
-
-            // Display action menu
-            for (int i = 0; i < action_menu_size; i++)
-            {
-                if (active_section == 2 && i == highlighted_action)
-                {
-                    wattron(action_win, COLOR_PAIR(4));
-                    mvwprintw(action_win, 2 + i, 2, "%s", action_menu[i]);
-                    wattroff(action_win, COLOR_PAIR(4));
-                }
-                else
-                {
-                    mvwprintw(action_win, 2 + i, 2, "%s", action_menu[i]);
-                }
-            }
-
-            // Refresh windows
-            wnoutrefresh(budget_win);
-            wnoutrefresh(trans_win);
-            wnoutrefresh(action_win);
-            wnoutrefresh(win);
-            // Do a single update of the physical screen - reduces flicker
-            doupdate();
         }
     }
 }

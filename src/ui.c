@@ -40,6 +40,49 @@ void cleanup_ncurses()
   endwin(); // End ncurses mode
 }
 
+BoundedWindow draw_bounded(int height, int width, int start_y, int start_x, bool highlight)
+{
+  WINDOW *dialog = newwin(height - 4, width - 4, start_y + 2, start_x + 2);
+  WINDOW *boundary = newwin(height, width, start_y, start_x);
+  if (highlight)
+  {
+    wattron(boundary, A_BOLD | COLOR_PAIR(4));
+  }
+  box(boundary, 0, 0);
+  wattroff(boundary, A_BOLD | COLOR_PAIR(4));
+
+  BoundedWindow result = {dialog, boundary};
+  return result;
+}
+
+BoundedWindow draw_bounded_with_title(int height, int width, int start_y, int start_x, const char *title, bool highlight, int alignment)
+{
+  WINDOW *dialog = newwin(height - 4, width - 4, start_y + 2, start_x + 2);
+  WINDOW *boundary = newwin(height, width, start_y, start_x);
+  if (highlight)
+  {
+    wattron(boundary, A_BOLD | COLOR_PAIR(4));
+  }
+  box(boundary, 0, 0);
+  wattroff(boundary, A_BOLD | COLOR_PAIR(4));
+
+  if (alignment == ALIGN_CENTER)
+  {
+    mvwprintw(boundary, 0, (width - strlen(title)) / 2, "%s", title);
+  }
+  else if (alignment == ALIGN_LEFT)
+  {
+    mvwprintw(boundary, 0, 2, "%s", title);
+  }
+  else if (alignment == ALIGN_RIGHT)
+  {
+    mvwprintw(boundary, 0, width - strlen(title) - 2, "%s", title);
+  }
+
+  BoundedWindow result = {dialog, boundary};
+  return result;
+}
+
 void draw_title(WINDOW *win, const char *title)
 {
   int width = getmaxx(win);
@@ -70,6 +113,121 @@ void draw_menu(WINDOW *win, int highlighted_item, const char *menu_items[], int 
     }
   }
   wnoutrefresh(win);
+}
+
+BoundedWindow draw_alert(const char *title, const char *message[], int message_count)
+{
+  int max_y, max_x;
+  getmaxyx(stdscr, max_y, max_x);
+  int size = message_count < 3 ? 5 : message_count + 2;
+  BoundedWindow alert = draw_bounded_with_title(size, 70, max_y / 2 - (size / 2), max_x / 2 - 35, title, false, ALIGN_CENTER);
+  for (int i = 0; i < message_count; i++)
+  {
+    mvwprintw(alert.textbox, 1 + i, 0, "%s", message[i]);
+  }
+  wnoutrefresh(alert.textbox);
+  doupdate();
+  return alert;
+}
+
+BoundedWindow draw_alert_persistent(const char *title, const char *message[], int message_count)
+{
+  const char *full_message[message_count + 1];
+  memcpy(full_message, message, message_count * sizeof(char *));
+  full_message[message_count] = "Press any key to continue...";
+  BoundedWindow alert = draw_alert(title, full_message, message_count + 1);
+  wnoutrefresh(alert.textbox);
+  doupdate();
+  getch();
+  return alert;
+}
+void draw_error(BoundedWindow win, const char *message)
+{
+  mvwprintw(win.textbox, 1, 0, "%s", message);
+  mvwprintw(win.textbox, 2, 0, "Press any key to continue...");
+  wnoutrefresh(win.textbox);
+  doupdate();
+  getch();
+  delwin(win.boundary);
+  delwin(win.textbox);
+  touchwin(stdscr);
+  wnoutrefresh(stdscr);
+  doupdate();
+}
+
+void destroy_bounded(BoundedWindow win)
+{
+  delwin(win.boundary);
+  delwin(win.textbox);
+  touchwin(stdscr);
+  wnoutrefresh(stdscr);
+  doupdate();
+}
+
+// does not trigger refresh
+void delete_bounded(BoundedWindow win)
+{
+  delwin(win.boundary);
+  delwin(win.textbox);
+}
+
+void bwresize(BoundedWindow win, int height, int width)
+{
+  wresize(win.boundary, height, width);
+  wresize(win.textbox, height - 2, width - 2);
+}
+
+void bwmove(BoundedWindow win, int start_y, int start_x)
+{
+  mvwin(win.boundary, start_y, start_x);
+  mvwin(win.textbox, start_y + 1, start_x + 1);
+}
+
+void bwnoutrefresh(BoundedWindow win)
+{
+  wnoutrefresh(win.boundary);
+  wnoutrefresh(win.textbox);
+}
+
+int get_confirmation(WINDOW *win, const char *message[], int item_count)
+{
+
+  const char *confirm_menu[] = {
+      "Yes (y)",
+      "No (n)"};
+
+  // Ask for confirmation
+  wclear(win);
+  for (int i = 0; i < item_count; i++)
+  {
+    mvwprintw(win, i + 1, 0, "%s", message[i]);
+  }
+  int highlighted_item = 0;
+
+  while (1)
+  {
+    draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 2);
+    wrefresh(win);
+
+    int ch = wgetch(win);
+
+    if (ch == 'y' || ch == 'Y')
+    {
+      return 0;
+    }
+    else if (ch == 'n' || ch == 'N' || ch == KEY_BACKSPACE || ch == KEY_BACKSPACE_ALT || ch == 27)
+    {
+      return 1;
+    }
+    else if (ch == KEY_DOWN || ch == KEY_UP || ch == '\t' || ch == KEY_BTAB)
+    {
+      highlighted_item = (highlighted_item + 1) % 2;
+    }
+    else if (ch == '\n')
+    {
+      return highlighted_item;
+    }
+  }
 }
 
 int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int start_y, int allow_back)
@@ -138,10 +296,274 @@ int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int s
   }
 }
 
-int get_input(WINDOW *win, void *value, int max_len, int y, int x, InputType type)
+int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items[], int item_count, int max_visible_items)
+{
+  int start_index = 0;
+  int visible_items = max_visible_items;
+  int current_highlighted = 0;
+  bool redraw = true;
+
+  keypad(win, TRUE); // Enable arrow keys
+
+  mvwprintw(win, 1, 0, "%s", prompt);
+
+  while (1)
+  {
+    if (redraw)
+    {
+      // Add scroll indicators if needed
+      if (start_index > 0)
+      {
+        mvwprintw(win, 1, getmaxx(win) - 3, "^");
+      }
+      else
+      {
+        mvwprintw(win, 1, getmaxx(win) - 3, " ");
+      }
+      if (start_index + visible_items < item_count)
+      {
+        mvwprintw(win, 2 + visible_items, getmaxx(win) - 3, "v");
+      }
+      else
+      {
+        mvwprintw(win, 2 + visible_items, getmaxx(win) - 3, " ");
+      }
+
+      for (int i = start_index; i < start_index + visible_items && i < item_count; i++)
+      {
+        // Apply highlighting before printing if this is the current item
+        if (i == current_highlighted)
+        {
+          wattron(win, COLOR_PAIR(4));
+        }
+
+        // Print the row
+        mvwprintw(win, 2 + i - start_index, 0, "%s", menu_items[i]);
+        // Turn off highlighting after printing
+        if (i == current_highlighted)
+        {
+          wattroff(win, COLOR_PAIR(4));
+        }
+      }
+
+      wrefresh(win);
+      redraw = false;
+    }
+
+    int ch = wgetch(win);
+
+    switch (ch)
+    {
+    case KEY_UP:
+      if (current_highlighted > 0)
+      {
+        current_highlighted--;
+        if (current_highlighted < start_index)
+        {
+          start_index = current_highlighted;
+        }
+        redraw = true;
+      }
+      continue;
+
+    case KEY_DOWN:
+      if (current_highlighted < item_count - 1)
+      {
+        current_highlighted++;
+        if (current_highlighted >= start_index + visible_items)
+        {
+          start_index = current_highlighted - visible_items + 1;
+        }
+        redraw = true;
+      }
+      continue;
+
+    case '\n': // Enter key - proceed to confirmation
+      return current_highlighted;
+
+    case 27: // ASCII ESC key
+      return -1;
+
+    case KEY_BACKSPACE:
+#if KEY_BACKSPACE_ALT != 127 // Only include this case if the constants are different
+    case KEY_BACKSPACE_ALT:
+#endif
+    case 127: // Backspace alternative
+      return -1;
+    }
+  }
+  return -1; // @dev this should never happen
+}
+
+int get_transaction_choice(WINDOW *win, const Transaction transactions[], int transaction_count, int max_visible_items) // optimized for case of many transactions
+{
+  int start_index = 0;
+  int visible_items = max_visible_items;
+  int current_highlighted = 0;
+  bool redraw = true;
+
+  keypad(win, TRUE); // Enable arrow keys
+
+  mvwprintw(win, 3, 0, "%-10s %-24s %-9s %-24s",
+            "Date", "Description", "Amount", "Category");
+
+  while (1)
+  {
+    if (redraw)
+    {
+      // Add scroll indicators if needed
+      if (start_index > 0)
+      {
+        mvwprintw(win, 3, getmaxx(win) - 3, "^");
+      }
+      else
+      {
+        mvwprintw(win, 3, getmaxx(win) - 3, " ");
+      }
+
+      if (start_index + visible_items < transaction_count)
+      {
+        mvwprintw(win, 4 + visible_items, getmaxx(win) - 3, "v");
+      }
+      else
+      {
+        mvwprintw(win, 4 + visible_items, getmaxx(win) - 3, " ");
+      }
+
+      char prev_date[11] = "";
+      for (int i = start_index; i < start_index + visible_items && i < transaction_count; i++)
+      {
+        // Clear the entire line first
+        wmove(win, 4 + i - start_index, 0);
+        wclrtoeol(win);
+
+        char row_item[MAX_NAME_LEN + 50] = "";
+
+        char category_name[MAX_NAME_LEN] = "Uncategorized";
+        if (transactions[i].category_id >= 0 && transactions[i].category_id < category_count)
+        {
+          strcpy(category_name, categories[transactions[i].category_id].name);
+        }
+
+        // Format date for display
+        char display_date[11] = "";
+
+        // If this date is the same as the previous one, use blank space
+        if (strcmp(transactions[i].date, prev_date) == 0 && i != current_highlighted)
+        {
+          strcpy(display_date, "          ");
+        }
+        else
+        {
+          // Format YYYY-MM-DD to MM-DD-YYYY for display
+          if (strlen(transactions[i].date) == 10)
+          {
+            sprintf(display_date, "%c%c-%c%c-%c%c%c%c",
+                    transactions[i].date[5], transactions[i].date[6], // Month
+                    transactions[i].date[8], transactions[i].date[9], // Day
+                    transactions[i].date[0], transactions[i].date[1], // Year
+                    transactions[i].date[2], transactions[i].date[3]);
+          }
+          else
+          {
+            strcpy(display_date, transactions[i].date); // Use as is if format is unexpected
+          }
+
+          // Remember this date for the next iteration
+          strcpy(prev_date, transactions[i].date);
+        }
+
+        // Create a descriptive menu item
+        char desc[24] = "";
+        if (strlen(transactions[i].description) > 23)
+        {
+          strncpy(desc, transactions[i].description, 20);
+          desc[20] = '\0';
+          strcat(desc, "...");
+        }
+        else
+        {
+          strcpy(desc, transactions[i].description);
+        }
+
+        sprintf(row_item, "%-10s %-24s $%-8.2f %-24s",
+                display_date,
+                desc,
+                transactions[i].amount,
+                category_name);
+
+        // Apply highlighting before printing if this is the current item
+        if (i == current_highlighted)
+        {
+          wattron(win, COLOR_PAIR(4));
+        }
+
+        // Print the row
+        wprintw(win, "%s", row_item);
+        // Turn off highlighting after printing
+        if (i == current_highlighted)
+        {
+          wattroff(win, COLOR_PAIR(4));
+        }
+      }
+
+      wrefresh(win);
+      redraw = false;
+    }
+
+    int ch = wgetch(win);
+
+    switch (ch)
+    {
+    case KEY_UP:
+      if (current_highlighted > 0)
+      {
+        current_highlighted--;
+        if (current_highlighted < start_index)
+        {
+          start_index = current_highlighted;
+        }
+        redraw = true;
+      }
+      continue;
+
+    case KEY_DOWN:
+      if (current_highlighted < transaction_count - 1)
+      {
+        current_highlighted++;
+        if (current_highlighted >= start_index + visible_items)
+        {
+          start_index = current_highlighted - visible_items + 1;
+        }
+        redraw = true;
+      }
+      continue;
+
+    case '\n': // Enter key - proceed to confirmation
+      return current_highlighted;
+
+    case 27: // ASCII ESC key
+      return -1;
+
+    case KEY_BACKSPACE:
+#if KEY_BACKSPACE_ALT != 127 // Only include this case if the constants are different
+    case KEY_BACKSPACE_ALT:
+#endif
+    case 127: // Backspace alternative
+      return -1;
+    }
+  }
+  return -1; // @dev this should never happen
+}
+
+int get_input(WINDOW *win, void *value, char *prompt, int max_len, int y, InputType type)
 {
   int ch;
   int pos = 0;
+  wmove(win, y, 0);
+  wclrtoeol(win);
+  mvwprintw(win, y, 0, "%s", prompt);
+  int x = strlen(prompt);
   int cursor_x = x;
   char buffer[max_len];
   buffer[0] = '\0';
@@ -155,17 +577,19 @@ int get_input(WINDOW *win, void *value, int max_len, int y, int x, InputType typ
   // If value already has content, display it
   if (type == INPUT_STRING)
   {
-    if (((char *)value)[0] != '\0')
-    {
-      strcpy(buffer, (char *)value);
-    }
+    // don't do this lol
+    // if (((char *)value)[0] != '\0')
+    // {
+    //   strcpy(buffer, (char *)value);
+    // }
   }
   else if (type == INPUT_DOUBLE)
   {
-    if (*(double *)value != 0.0)
-    {
-      sprintf(buffer, "%.2f", *(double *)value);
-    }
+    // don't do this lol
+    // if (*(double *)value != 0.0)
+    // {
+    //   sprintf(buffer, "%.2f", *(double *)value);
+    // }
   }
   else if (type == INPUT_INT)
   {
