@@ -24,5 +24,8 @@ int create_directory_if_not_exists(const char *path);
 void initialize_data_directories();
 int get_days_in_month(int m, int y);
 int validate_day(int day, int month, int year);
-
+char* get_month_name();
+void compute_monthly();
+void sort_categories_by_budget();
+void sort_categories_by_spent();
 #endif // UTILS_H 

@@ -1,4 +1,9 @@
+#include "globals.h"
 #include "ui.h"
+#include "piechart.h" // Include piechart.h for pie chart color constants
+#include <string.h>
+#include <time.h>
+#include <math.h>
 
 void setup_ncurses()
 {
@@ -42,8 +47,8 @@ void cleanup_ncurses()
 
 BoundedWindow draw_bounded(int height, int width, int start_y, int start_x, bool highlight)
 {
-  WINDOW *dialog = newwin(height - 4, width - 4, start_y + 2, start_x + 2);
-  WINDOW *boundary = newwin(height, width, start_y, start_x);
+  WINDOW *dialog = newwin(height, width, start_y, start_x);
+  WINDOW *boundary = newwin(height + 2, width + 2, start_y - 1, start_x - 1);
   if (highlight)
   {
     wattron(boundary, A_BOLD | COLOR_PAIR(4));
@@ -68,15 +73,15 @@ BoundedWindow draw_bounded_with_title(int height, int width, int start_y, int st
 
   if (alignment == ALIGN_CENTER)
   {
-    mvwprintw(boundary, 0, (width - strlen(title)) / 2, "%s", title);
+    mvwprintw(boundary, 0, (width - strlen(title)) / 2, " %s ", title);
   }
   else if (alignment == ALIGN_LEFT)
   {
-    mvwprintw(boundary, 0, 2, "%s", title);
+    mvwprintw(boundary, 0, 5, " %s ", title);
   }
   else if (alignment == ALIGN_RIGHT)
   {
-    mvwprintw(boundary, 0, width - strlen(title) - 2, "%s", title);
+    mvwprintw(boundary, 0, width - strlen(title) - 5, " %s ", title);
   }
 
   BoundedWindow result = {dialog, boundary};
@@ -212,7 +217,7 @@ int get_confirmation(WINDOW *win, const char *message[], int item_count)
 
   while (1)
   {
-    draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 3);
+    draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 2);
     wrefresh(win);
 
     int ch = wgetch(win);
@@ -446,10 +451,7 @@ int get_transaction_choice(WINDOW *win, const Transaction transactions[], int tr
         char row_item[MAX_NAME_LEN + 50] = "";
 
         char category_name[MAX_NAME_LEN] = "Uncategorized";
-        if (transactions[i].category_id >= 0 && transactions[i].category_id < category_count)
-        {
-          strcpy(category_name, categories[transactions[i].category_id].name);
-        }
+        strcpy(category_name, transactions[i].cat_name);
 
         // Format date for display
         char display_date[11] = "";
@@ -481,21 +483,21 @@ int get_transaction_choice(WINDOW *win, const Transaction transactions[], int tr
 
         // Create a descriptive menu item
         char desc[24] = "";
-        if (strlen(transactions[i].description) > 23)
+        if (strlen(transactions[i].desc) > 23)
         {
-          strncpy(desc, transactions[i].description, 20);
+          strncpy(desc, transactions[i].desc, 20);
           desc[20] = '\0';
           strcat(desc, "...");
         }
         else
         {
-          strcpy(desc, transactions[i].description);
+          strcpy(desc, transactions[i].desc);
         }
 
         sprintf(row_item, "%-10s %-24s $%-8.2f %-24s",
                 display_date,
                 desc,
-                transactions[i].amount,
+                transactions[i].amt,
                 category_name);
 
         // Apply highlighting before printing if this is the current item
@@ -580,31 +582,6 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
   // Turn on cursor
   curs_set(1);
 
-  // If value already has content, display it
-  if (type == INPUT_STRING)
-  {
-    // don't do this lol
-    // if (((char *)value)[0] != '\0')
-    // {
-    //   strcpy(buffer, (char *)value);
-    // }
-  }
-  else if (type == INPUT_DOUBLE)
-  {
-    // don't do this lol
-    // if (*(double *)value != 0.0)
-    // {
-    //   sprintf(buffer, "%.2f", *(double *)value);
-    // }
-  }
-  else if (type == INPUT_INT)
-  {
-    if (*(int *)value != 0)
-    {
-      sprintf(buffer, "%d", *(int *)value);
-    }
-  }
-
   mvwprintw(win, y, x, "%s", buffer);
   pos = strlen(buffer);
   int cursor_x = x + pos;
@@ -619,6 +596,11 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
     if (ch == '\n')
     {
       buffer[pos] = '\0';
+      if (strlen(buffer) == 0)
+      {
+        curs_set(0);
+        return 0;
+      }
       break;
     }
     else if (ch == 27)
@@ -673,7 +655,7 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
     {
       if (type == INPUT_DOUBLE)
       {
-        if (isdigit(ch) || ch == '.' || ch == '-')
+        if (isdigit(ch) || ch == '.')
         {
           if (ch == '.' && strchr(buffer, '.') != NULL)
           {
@@ -692,7 +674,7 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
       }
       else if (type == INPUT_INT)
       {
-        if (isdigit(ch) || ch == '-')
+        if (isdigit(ch))
         {
           if (ch == '-' && pos != 0)
           {
@@ -716,6 +698,7 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
       cursor_x++;
 
       // Redraw the input field
+      wmove(win, y, x);
       wclrtoeol(win);
       mvwprintw(win, y, x, "%s", buffer);
       wmove(win, y, cursor_x);
@@ -745,16 +728,15 @@ int get_input(WINDOW *win, void *value, char *prompt, int max_len, InputType typ
     strcpy((char *)value, buffer);
   }
 
-  wrefresh(win);
   wmove(win, y + 1, 0);
-  wclrtoeol(win);
+  wrefresh(win);
 
   curs_set(0);
   return 1;
 }
 
 // Function to get date input with improved UX
-int get_date_input(WINDOW *win, char *date_buffer, char* prompt)
+int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
 {
   int ch;
   int highlighted_field = 0;           // 0 = day, 1 = month, 2 = year, 3 = "Today" button
@@ -1003,7 +985,7 @@ void display_categories(WINDOW *win, int start_y)
 {
   int y = start_y;
 
-  mvwprintw(win, y++, 2, "%-30s %-15s %-15s %-15s", "Category", "Budget", "Spent", "Percentage");
+  mvwprintw(win, y++, 2, "%-30s %-15s %-15s", "Category", "Spent", "Budget");
   mvwprintw(win, y++, 2, "-------------------------------------------------------------------");
 
   double total_allocated = 0.0;
@@ -1013,11 +995,6 @@ void display_categories(WINDOW *win, int start_y)
   {
     total_allocated += categories[i].budget;
     total_spent += categories[i].spent;
-    double percentage = 0.0;
-    if (categories[i].budget > 0)
-    {
-      percentage = (categories[i].spent / categories[i].budget) * 100.0;
-    }
 
     char name[MAX_NAME_LEN];
     if (strlen(categories[i].name) > 29)
@@ -1031,35 +1008,47 @@ void display_categories(WINDOW *win, int start_y)
       strcpy(name, categories[i].name);
     }
 
-    mvwprintw(win, y++, 2, "%-30s $%-14.2f $%-14.2f %.2f%%",
-              name, categories[i].budget, categories[i].spent, percentage);
+    // Display color block for pie chart legend
+    if (categories[i].budget > 0)
+    {
+      int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS ? NUM_PIE_COLORS - 1 : i);
+      wattron(win, COLOR_PAIR(color_pair));
+      mvwprintw(win, y, 2, "  ");
+      wattroff(win, COLOR_PAIR(color_pair));
+      mvwprintw(win, y++, 4, " %-27s $%-14.2f $%-14.2f",
+                name, categories[i].spent, categories[i].budget);
+    }
+    else
+    {
+      mvwprintw(win, y++, 2, "%-30s $%-14.2f $%-14.2f",
+                name, categories[i].spent, categories[i].budget);
+    }
   }
+  mvwprintw(win, y++, 2, "-------------------------------------------------------------------");
 
-  mvwprintw(win, y++, 2, "-------------------------------------------------------");
-  mvwprintw(win, y++, 2, "%-30s $%-14.2f",
-            "Total Allocated", total_allocated);
-
-  double remaining = total_allocated - total_spent;
-  if (remaining >= 0)
+  if (total_allocated < total_budget)
   {
     wattron(win, COLOR_PAIR(2));
-  }
-  else
-  {
-    wattron(win, COLOR_PAIR(3));
-  }
-
-  mvwprintw(win, y++, 2, "%-30s $%-14.2f",
-            "Remaining This Month", remaining);
-
-  if (remaining >= 0)
-  {
+    double savings = total_budget - total_allocated;
+    double savings_percent = (savings / total_budget) * 100.0;
+    wattron(win, COLOR_PAIR(PIE_COLOR_START + NUM_PIE_COLORS - 1));
+    mvwprintw(win, y, 2, "  ");
+    wattroff(win, COLOR_PAIR(PIE_COLOR_START + NUM_PIE_COLORS - 1));
+    mvwprintw(win, y++, 4, " %-27s %-15s $%.2f (%.2f%%)",
+              "Savings", " ", savings, savings_percent);
     wattroff(win, COLOR_PAIR(2));
   }
   else
   {
+    wattron(win, COLOR_PAIR(3));
+    double overspent = total_spent - total_budget;
+    double overspent_percent = (overspent / total_budget) * 100.0;
+    mvwprintw(win, y++, 2, "%-30s $%.2f (%.2f%%)",
+              "Overspent", overspent, overspent_percent);
     wattroff(win, COLOR_PAIR(3));
   }
+  mvwprintw(win, y++, 2, "%-30s $%-14.2f $%-14.2f",
+            "Total", total_spent, total_allocated);
 }
 
 void display_transactions(WINDOW *win, int start_y)
@@ -1093,10 +1082,7 @@ void display_transactions(WINDOW *win, int start_y)
   {
     char category_name[MAX_NAME_LEN] = "Uncategorized";
 
-    if (transactions[i].category_id >= 0 && transactions[i].category_id < category_count)
-    {
-      strcpy(category_name, categories[transactions[i].category_id].name);
-    }
+    strcpy(category_name, transactions[i].cat_name);
 
     // Format date for display
     char display_date[11];
@@ -1127,7 +1113,7 @@ void display_transactions(WINDOW *win, int start_y)
     }
 
     mvwprintw(win, y++, 2, "%-10s %-24s $%-9.2f %-24s",
-              display_date, transactions[i].description, transactions[i].amount, category_name);
+              display_date, transactions[i].desc, transactions[i].amt, category_name);
   }
 }
 
@@ -1182,4 +1168,105 @@ void format_date(WINDOW *win, int y, int x, int day, int month, int year,
   {
     wmove(win, y, x + 12); // "Today" button
   }
+}
+
+BoundedWindow draw_bar_chart(WINDOW *win)
+{
+  double total_spent = 0.0;
+  double total_budget_allocated = 0.0;
+
+  int y, x, start_y, start_x;
+  getmaxyx(win, y, x);
+  getbegyx(win, start_y, start_x);
+
+  // First calculate totals and prepare data
+  for (int i = 0; i < category_count; i++)
+  {
+    total_spent += categories[i].spent;
+    total_budget_allocated += categories[i].budget;
+  }
+
+  int bar_width = x - 20; // Leave some margin
+
+  if (bar_width < 20)
+  {
+    bar_width = 20; // Minimum width for visibility
+  }
+
+  BoundedWindow bar_win = draw_bounded(1, bar_width, start_y + y - 2, start_x + 10, false);
+
+  // Skip if nothing spent
+  if (total_spent <= 0)
+  {
+    mvwprintw(win, y - 5, 1, "No spending recorded yet");
+    return bar_win;
+  }
+
+  // Title for bar chart
+  mvwprintw(win, y - 5, 1, "Spending Distribution");
+
+  // Sort categories by spent amount for the bar chart (highest to lowest)
+  typedef struct
+  {
+    int index;
+    double pct;
+  } SpendingCategory;
+
+  SpendingCategory sorted_cats[MAX_CATEGORIES];
+  int num_active_cats = 0;
+
+  // Fill array with categories that have spending
+  for (int i = 0; i < category_count; i++)
+  {
+    if (categories[i].spent > 0)
+    {
+      sorted_cats[num_active_cats].index = i;
+      sorted_cats[num_active_cats].pct = categories[i].spent / total_budget_allocated;
+      num_active_cats++;
+    }
+  }
+
+  // Sort by spent (bubble sort - simple but sufficient for small arrays)
+  for (int i = 0; i < num_active_cats - 1; i++)
+  {
+    for (int j = 0; j < num_active_cats - i - 1; j++)
+    {
+      if (sorted_cats[j].pct < sorted_cats[j + 1].pct)
+      {
+        SpendingCategory temp = sorted_cats[j];
+        sorted_cats[j] = sorted_cats[j + 1];
+        sorted_cats[j + 1] = temp;
+      }
+    }
+  }
+
+  // Now draw the colored sections representing each category's portion
+  int current_pos = 0;
+  double drawn_pct = 0.0;
+  char usage_str[50];
+  sprintf(usage_str, " $%.2f/$%.2f (%.2f%%)", total_spent, total_budget_allocated, (total_spent / total_budget_allocated) * 100.0);
+  int len = strlen(usage_str);
+
+  for (int i = 0; i < num_active_cats; i++)
+  {
+    drawn_pct += sorted_cats[i].pct;
+    int cat_index = sorted_cats[i].index;
+    int color_pair = PIE_DARKER_COLOR_START + (cat_index >= NUM_PIE_COLORS ? NUM_PIE_COLORS - 1 : cat_index);
+
+    wattron(bar_win.textbox, COLOR_PAIR(color_pair));
+    while (current_pos < bar_width * drawn_pct)
+    {
+      char ch = current_pos < len ? usage_str[current_pos] : ' ';
+      mvwaddch(bar_win.textbox, 0, current_pos, ch);
+      current_pos++;
+    }
+    wattroff(bar_win.textbox, COLOR_PAIR(color_pair));
+  }
+  while (current_pos < bar_width)
+  {
+    char ch = current_pos < len ? usage_str[current_pos] : ' ';
+    mvwaddch(bar_win.textbox, 0, current_pos, ch);
+    current_pos++;
+  }
+  return bar_win;
 }

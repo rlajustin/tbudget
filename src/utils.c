@@ -1,116 +1,132 @@
 #include "utils.h"
 
-void write_export_content(FILE *export_file) {
+void write_export_content(FILE *export_file)
+{
     // Write CSV headers
     fprintf(export_file, "TBudget Export\n\n");
-    
+
     // Total budget
     fprintf(export_file, "Total Budget:,%.2f\n\n", total_budget);
-    
+
     // Categories
     fprintf(export_file, "CATEGORIES\n");
     fprintf(export_file, "Name,Amount,Percentage\n");
-    
+
     double total_allocated = 0.0;
-    for (int i = 0; i < category_count; i++) {
+    for (int i = 0; i < category_count; i++)
+    {
         total_allocated += categories[i].budget;
     }
-    
-    for (int i = 0; i < category_count; i++) {
+
+    for (int i = 0; i < category_count; i++)
+    {
         double percentage = 0.0;
-        if (total_budget > 0) {
+        if (total_budget > 0)
+        {
             percentage = (categories[i].budget / total_budget) * 100.0;
         }
-        
+
         // Escape category names with quotes if they contain commas
-        if (strchr(categories[i].name, ',') != NULL) {
-            fprintf(export_file, "\"%s\",%.2f,%.2f%%\n", 
+        if (strchr(categories[i].name, ',') != NULL)
+        {
+            fprintf(export_file, "\"%s\",%.2f,%.2f%%\n",
                     categories[i].name, categories[i].budget, percentage);
-        } else {
-            fprintf(export_file, "%s,%.2f,%.2f%%\n", 
+        }
+        else
+        {
+            fprintf(export_file, "%s,%.2f,%.2f%%\n",
                     categories[i].name, categories[i].budget, percentage);
         }
     }
-    
-    fprintf(export_file, "Total Allocated,%.2f,%.2f%%\n", 
-            total_allocated, 
+
+    fprintf(export_file, "Total Allocated,%.2f,%.2f%%\n",
+            total_allocated,
             total_budget > 0 ? (total_allocated / total_budget) * 100.0 : 0.0);
-    
+
     double remaining = total_budget - total_allocated;
-    fprintf(export_file, "Remaining Unallocated,%.2f,%.2f%%\n\n", 
-            remaining, 
+    fprintf(export_file, "Remaining Unallocated,%.2f,%.2f%%\n\n",
+            remaining,
             total_budget > 0 ? (remaining / total_budget) * 100.0 : 0.0);
-    
+
     // Transactions
     fprintf(export_file, "TRANSACTIONS\n");
     fprintf(export_file, "ID,Description,Amount,Category,Date\n");
-    
-    for (int i = 0; i < transaction_count; i++) {
+
+    for (int i = 0; i < transaction_count; i++)
+    {
         char category_name[MAX_NAME_LEN] = "Uncategorized";
-        
-        if (transactions[i].category_id >= 0 && transactions[i].category_id < category_count) {
-            strcpy(category_name, categories[transactions[i].category_id].name);
-        }
-        
+        strcpy(category_name, transactions[i].cat_name);
+
         // Escape descriptions with quotes if they contain commas
-        if (strchr(transactions[i].description, ',') != NULL) {
-            fprintf(export_file, "%d,\"%s\",%.2f,\"%s\",%s\n", 
-                    i + 1, transactions[i].description, transactions[i].amount, 
+        if (strchr(transactions[i].desc, ',') != NULL)
+        {
+            fprintf(export_file, "%d,\"%s\",%.2f,\"%s\",%s\n",
+                    i + 1, transactions[i].desc, transactions[i].amt,
                     category_name, transactions[i].date);
-        } else if (strchr(category_name, ',') != NULL) {
+        }
+        else if (strchr(category_name, ',') != NULL)
+        {
             // If category name has a comma, we need to quote it
-            fprintf(export_file, "%d,%s,%.2f,\"%s\",%s\n", 
-                    i + 1, transactions[i].description, transactions[i].amount, 
+            fprintf(export_file, "%d,%s,%.2f,\"%s\",%s\n",
+                    i + 1, transactions[i].desc, transactions[i].amt,
                     category_name, transactions[i].date);
-        } else {
-            fprintf(export_file, "%d,%s,%.2f,%s,%s\n", 
-                    i + 1, transactions[i].description, transactions[i].amount, 
+        }
+        else
+        {
+            fprintf(export_file, "%d,%s,%.2f,%s,%s\n",
+                    i + 1, transactions[i].desc, transactions[i].amt,
                     category_name, transactions[i].date);
         }
     }
 }
 
-void export_data_to_csv(int silent) {
+void export_data_to_csv(int silent)
+{
     // Create the main export file
     FILE *file = fopen(export_file_path, "w");
-    if (!file) {
-        if (!silent) {
+    if (!file)
+    {
+        if (!silent)
+        {
             fprintf(stderr, "Error: Unable to open export file\n");
         }
         return;
     }
-    
+
     // Also create a timestamped version in the exports directory
     char timestamp_filename[MAX_BUFFER];
     char timestamp[32];
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", t);
-    
+
     // Create exports directory if it doesn't exist
     char mkdir_cmd[MAX_BUFFER];
     sprintf(mkdir_cmd, "mkdir -p %s", data_storage_dir);
     system(mkdir_cmd);
-    
+
     sprintf(timestamp_filename, "%s/tbudget_export_%s.csv", data_storage_dir, timestamp);
     FILE *history_file = fopen(timestamp_filename, "w");
-    
+
     // Write content to the main export file
     write_export_content(file);
     fclose(file);
-    
+
     // Write to the history file if it was opened successfully
-    if (history_file) {
+    if (history_file)
+    {
         write_export_content(history_file);
         fclose(history_file);
-        
-        if (!silent) {
+
+        if (!silent)
+        {
             fprintf(stderr, "Created timestamped backup: %s\n", timestamp_filename);
         }
     }
-    
+
     // Return success message to stderr for visibility, but only if not silent
-    if (!silent) {
+    if (!silent)
+    {
         fprintf(stderr, "Successfully exported data to %s\n", export_file_path);
     }
 }
@@ -382,10 +398,11 @@ void import_data_from_csv(const char *filename)
             // Store in transaction array
             if (strlen(description) > 0)
             {
-                strncpy(transactions[transaction_count].description, description, MAX_NAME_LEN - 1);
-                transactions[transaction_count].description[MAX_NAME_LEN - 1] = '\0';
-                transactions[transaction_count].amount = amount;
-                transactions[transaction_count].category_id = category_id;
+                strncpy(transactions[transaction_count].desc, description, MAX_NAME_LEN - 1);
+                transactions[transaction_count].desc[MAX_NAME_LEN - 1] = '\0';
+                transactions[transaction_count].amt = amount;
+                strncpy(transactions[transaction_count].cat_name, category_name, MAX_NAME_LEN - 1);
+                transactions[transaction_count].cat_name[MAX_NAME_LEN - 1] = '\0';
                 strncpy(transactions[transaction_count].date, date, 10);
                 transactions[transaction_count].date[10] = '\0';
                 transaction_count++;
@@ -412,26 +429,26 @@ void save_data_to_file()
     // Write a simple header for file format validation
     const char header[] = "TBUDGET_DATA";
     fwrite(header, sizeof(char), strlen(header), file);
-    
+
     // Write version for future compatibility
     const int version = 1;
     fwrite(&version, sizeof(int), 1, file);
-    
+
     // Write total budget
     fwrite(&total_budget, sizeof(double), 1, file);
-    
+
     // Write category count
     fwrite(&category_count, sizeof(int), 1, file);
-    
+
     // Write all categories at once
     fwrite(categories, sizeof(Category), category_count, file);
-    
+
     // Write transaction count
     fwrite(&transaction_count, sizeof(int), 1, file);
-    
+
     // Write all transactions at once
     fwrite(transactions, sizeof(Transaction), transaction_count, file);
-    
+
     fclose(file);
 }
 
@@ -452,7 +469,7 @@ int load_data_from_file()
         fclose(file);
         return -2;
     }
-    
+
     // Read version
     int version;
     if (fread(&version, sizeof(int), 1, file) != 1 || version != 1)
@@ -461,145 +478,229 @@ int load_data_from_file()
         fclose(file);
         return -1;
     }
-    
+
     // Read total budget
     if (fread(&total_budget, sizeof(double), 1, file) != 1)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Read category count
     if (fread(&category_count, sizeof(int), 1, file) != 1)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Validate category count to prevent buffer overflow
     if (category_count > MAX_CATEGORIES || category_count < 0)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Read all categories at once
     if (fread(categories, sizeof(Category), category_count, file) != (size_t)category_count)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Read transaction count
     if (fread(&transaction_count, sizeof(int), 1, file) != 1)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Validate transaction count to prevent buffer overflow
     if (transaction_count > MAX_TRANSACTIONS || transaction_count < 0)
     {
         fclose(file);
         return -1;
     }
-    
+
     // Read all transactions at once
     if (fread(transactions, sizeof(Transaction), transaction_count, file) != (size_t)transaction_count)
     {
         fclose(file);
         return -1;
     }
-    
+
     fclose(file);
     return 1;
 }
 
-char *get_home_directory() {
+char *get_home_directory()
+{
     char *home = getenv("HOME");
-    
-    if (home != NULL) {
+
+    if (home != NULL)
+    {
         return home;
     }
-    
+
     // If HOME is not available, try to get it from passwd
     struct passwd *pw = getpwuid(getuid());
-    if (pw != NULL) {
+    if (pw != NULL)
+    {
         return pw->pw_dir;
     }
-    
+
     // If all fails, use current directory
     return ".";
 }
 
-int create_directory_if_not_exists(const char *path) {
+int create_directory_if_not_exists(const char *path)
+{
     struct stat st;
-    
-    if (stat(path, &st) == 0) {
+
+    if (stat(path, &st) == 0)
+    {
         // Already exists
-        if (S_ISDIR(st.st_mode)) {
+        if (S_ISDIR(st.st_mode))
+        {
             return 0; // Directory exists
         }
         return -1; // Exists but is not a directory
     }
-    
-    // Create the directory
-    #ifdef _WIN32
+
+// Create the directory
+#ifdef _WIN32
     int result = mkdir(path);
-    #else
+#else
     int result = mkdir(path, 0755);
-    #endif
-    
-    if (result != 0) {
+#endif
+
+    if (result != 0)
+    {
         fprintf(stderr, "Error creating directory %s: %s\n", path, strerror(errno));
         return -1;
     }
-    
+
     return 0;
 }
 
-void initialize_data_directories() {
+void initialize_data_directories()
+{
     // Get the user's home directory
     char *home_dir = get_home_directory();
-    
-    // Create the app directory path
-    #ifdef __APPLE__
+
+// Create the app directory path
+#ifdef __APPLE__
     sprintf(app_data_dir, "%s/Library/Application Support/%s", home_dir, APP_DIR_NAME);
-    #elif defined(_WIN32)
+#elif defined(_WIN32)
     sprintf(app_data_dir, "%s\\AppData\\Local\\%s", home_dir, APP_DIR_NAME);
-    #else // Linux and other Unix-like
+#else // Linux and other Unix-like
     sprintf(app_data_dir, "%s/.config/%s", home_dir, APP_DIR_NAME);
-    #endif
-    
+#endif
+
     // Create the data directory path
     sprintf(data_storage_dir, "%s/%s", app_data_dir, DATA_DIR_NAME);
-    
+
     // Create file paths
     sprintf(data_file_path, "%s/%s", app_data_dir, DATA_FILE_NAME);
     sprintf(export_file_path, "%s/%s", app_data_dir, EXPORT_FILE_NAME);
-    
+
     // Create directories
     create_directory_if_not_exists(app_data_dir);
     create_directory_if_not_exists(data_storage_dir);
 }
 
 // Helper function to get days in a month
-int get_days_in_month(int m, int y) {
+int get_days_in_month(int m, int y)
+{
     // Array of days in each month
     static const int days_in_month[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    
+
     if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)))
         return 29; // Leap year
     return days_in_month[m];
 }
 
 // Helper function to validate day value
-int validate_day(int day, int month, int year) {
+int validate_day(int day, int month, int year)
+{
     int max_days = get_days_in_month(month, year);
-    if (day > max_days) {
+    if (day > max_days)
+    {
         return 1; // Wrap around to 1
-    } else if (day < 1) {
+    }
+    else if (day < 1)
+    {
         return max_days; // Wrap to max days
     }
     return day;
+}
+
+char* get_month_name() {
+    time_t now = time(NULL);
+    struct tm *today = localtime(&now);
+    static const char* month_names[] = {
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    };
+    return (char*)month_names[today->tm_mon];
+}
+
+void compute_monthly()
+{
+    time_t now = time(NULL);
+    struct tm *today = localtime(&now);
+    int current_month = today->tm_mon + 1;
+    int current_year = today->tm_year + 1900;
+    char year_month_pattern[8];
+    sprintf(year_month_pattern, "%04d-%02d", current_year, current_month);
+    for (int i = 0; i < category_count; i++)
+    {
+        categories[i].spent = 0.0;
+    }
+    for (int i = transaction_count - 1; i >= 0; i--)
+    {
+        if (strncmp(transactions[i].date, year_month_pattern, 7) != 0)
+        {
+            break;
+        }
+        char *category_name = transactions[i].cat_name;
+        for (int j = 0; j < category_count; j++)
+        {
+            if (strcmp(categories[j].name, category_name) == 0)
+            {
+                if (transactions[i].expense)
+                {
+                    categories[j].spent += transactions[i].amt;
+                }
+                else
+                {
+                    categories[j].spent -= transactions[i].amt;
+                }
+                break;
+            }
+        }
+    }
+}
+
+void sort_categories_by_budget() {
+    for (int i = 0; i < category_count; i++) {
+        for (int j = i + 1; j < category_count; j++) {
+            if (categories[i].budget < categories[j].budget) {
+                Category temp = categories[i];
+                categories[i] = categories[j];
+                categories[j] = temp;
+            }
+        }
+    }
+}
+
+void sort_categories_by_spent() {
+    for (int i = 0; i < category_count; i++) {
+        for (int j = i + 1; j < category_count; j++) {
+            if (categories[i].spent < categories[j].spent) {
+                Category temp = categories[i];
+                categories[i] = categories[j];
+                categories[j] = temp;
+            }
+        }
+    }
 }

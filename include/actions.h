@@ -10,7 +10,7 @@
 void add_category_dialog();
 void remove_category_dialog();
 void set_budget_dialog();
-void add_transaction_dialog();
+void add_expense_dialog();
 void remove_transaction_dialog();
 
 #endif

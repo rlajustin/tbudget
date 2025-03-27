@@ -1,8 +1,10 @@
 #include "main.h"
+#include <locale.h>
 
 // Main function
 int main(int argc, char *argv[])
 {
+    setlocale(LC_ALL, "");
     int mode = MODE_MENU; // Default mode
 
     // Parse command line arguments
@@ -108,6 +110,9 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    sort_categories_by_budget();
+    compute_monthly();
+
     // Initialize data directories
     setup_ncurses();
 
@@ -162,8 +167,8 @@ void run_menu_mode()
     {
         clear();
         draw_title(stdscr, "TBudget - Budget Management Tool");
-
-        mvprintw(5, 2, "Total Budget: $%.2f", total_budget);
+        char* month = get_month_name();
+        mvprintw(5, 2, "%s Budget: $%.2f", month, total_budget);
 
         int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
 
@@ -199,18 +204,18 @@ void run_dashboard_mode()
     int budget_height = max_y / 2;
     int trans_height = max_y - budget_height - 1; // -1 for title bar and bottom bar
     int action_width = max_x / 3;
-
+    int left_col_width = max_x - action_width;
     // Define active section (0 = budget, 1 = transactions, 2 = actions)
     int active_section = 2; // Start with actions menu
 
     // Create sub-windows
-    BoundedWindow budget_win, trans_win, action_win;
+    BoundedWindow budget_win, trans_win, action_win, breakdown_win, bar_win;
 
     // Prepare action menu
     const char *action_menu[] = {
         "Add Category",
         "Remove Category",
-        "Add Transaction",
+        "Add Expense",
         "Remove Transaction",
         "Set Total Budget",
         "Export to CSV",
@@ -221,10 +226,11 @@ void run_dashboard_mode()
     // Turn off cursor
     curs_set(0);
     clear();
-    draw_title(win, "TBudget Dashboard - Budget Management Tool");
+    draw_title(win, "tbudget Dashboard - Budget Management Tool");
 
     bool needs_redraw = true;
     bool is_leaving = false;
+    bool show_pie_chart = true; // Flag to toggle between table and pie chart view
 
     // Main dashboard loop
     while (1)
@@ -236,34 +242,40 @@ void run_dashboard_mode()
             budget_height = max_y / 2;
             trans_height = max_y - budget_height - 2;
             action_width = max_x / 3;
+            left_col_width = max_x - action_width;
 
             delete_bounded(budget_win);
+            delete_bounded(breakdown_win);
             delete_bounded(trans_win);
             delete_bounded(action_win);
+            delete_bounded(bar_win);
 
-            budget_win = draw_bounded_with_title(budget_height - 4, max_x - action_width - 4, 3, 2, "Budget Summary", active_section == 0, ALIGN_LEFT);
-            trans_win = draw_bounded_with_title(trans_height - 4, max_x - action_width - 4, budget_height + 3, 2, "Transaction History", active_section == 1, ALIGN_LEFT);
+            budget_win = draw_bounded_with_title(budget_height - 4, left_col_width / 2 - 4, 3, 2, "Budget Summary", active_section == 0, ALIGN_LEFT);
+            breakdown_win = draw_bounded_with_title(budget_height - 4, left_col_width - left_col_width / 2 - 4, 3, left_col_width / 2 + 2, "Budget Breakdown", false, ALIGN_LEFT);
+            trans_win = draw_bounded_with_title(trans_height - 4, left_col_width, budget_height + 3, 2, "Transaction History", active_section == 1, ALIGN_LEFT);
             action_win = draw_bounded_with_title(max_y - 6, action_width - 4, 3, max_x - action_width + 2, "Actions", active_section == 2, ALIGN_LEFT);
 
             // Key help line
-            char *help_text = is_leaving ? "Exiting TBudget, press Q again to confirm" : "TAB to switch sections | ENTER to select | Q to quit";
-
-            // Adjust window sizes and positions
-            // bwresize(budget_win, budget_height, max_x - action_width);
-            // bwresize(trans_win, trans_height, max_x - action_width);
-            // bwresize(action_win, max_y - 1, action_width);
-            // bwmove(trans_win, budget_height + 1, 0);
-            // bwmove(action_win, 1, max_x - action_widtfh);
+            char *help_text = is_leaving ? "Exiting tbudget, press Q again to confirm" : "TAB to switch sections | P to toggle pie chart | ENTER to select | Q to quit";
 
             // Display help line at the bottom
             mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
-            mvprintw(max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
+            mvwprintw(win, max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
 
+            char* month = get_month_name();
             // Display budget summary
-            mvwprintw(budget_win.textbox, 1, 2, "Total Budget: $%.2f", total_budget);
+            mvwprintw(budget_win.textbox, 1, 2, "%s Budget: $%.2f", month, total_budget);
             if (category_count > 0)
             {
+                // Show tabular view
                 display_categories(budget_win.textbox, 3);
+                if (show_pie_chart)
+                {
+                    int x, y;
+                    getmaxyx(breakdown_win.textbox, y, x);
+                    display_budget_pie_chart(breakdown_win.textbox, 0.8 * x, 0.65 * y);
+                    bar_win = draw_bar_chart(breakdown_win.textbox);
+                }
             }
             else
             {
@@ -302,6 +314,11 @@ void run_dashboard_mode()
             bwnoutrefresh(budget_win);
             bwnoutrefresh(trans_win);
             bwnoutrefresh(action_win);
+            bwnoutrefresh(breakdown_win);
+            // Only refresh bar_win if it has valid windows
+            if (bar_win.textbox != NULL && bar_win.boundary != NULL) {
+                bwnoutrefresh(bar_win);
+            }
             doupdate();
             needs_redraw = false;
         }
@@ -314,8 +331,10 @@ void run_dashboard_mode()
             if (is_leaving)
             {
                 delete_bounded(budget_win);
+                delete_bounded(breakdown_win);
                 delete_bounded(trans_win);
                 delete_bounded(action_win);
+                delete_bounded(bar_win);
                 return;
             }
             else
@@ -333,6 +352,14 @@ void run_dashboard_mode()
                 needs_redraw = true;
                 continue;
             }
+        }
+
+        // Handle toggle between pie chart and table view
+        if (ch == 'p' || ch == 'P')
+        {
+            show_pie_chart = !show_pie_chart;
+            needs_redraw = true;
+            continue;
         }
 
         // Handle navigation between sections
@@ -388,29 +415,26 @@ void run_dashboard_mode()
                 {
                 case 0:
                     add_category_dialog();
+                    sort_categories_by_budget();
                     needs_redraw = true;
                     break;
 
                 case 1: // Remove Category
                     remove_category_dialog();
+                    compute_monthly();
                     needs_redraw = true;
                     break;
 
-                case 2: // Add Transaction
-                    add_transaction_dialog();
+                case 2: // Add Expense
+                    add_expense_dialog();
+                    compute_monthly();
                     needs_redraw = true;
                     break;
 
                 case 3: // Remove Transaction
-                    if (transaction_count > 0)
-                    {
-                        remove_transaction_dialog();
-                        needs_redraw = true;
-                    }
-                    else
-                    {
-                        draw_error(action_win, "No transactions to remove.");
-                    }
+                    remove_transaction_dialog();
+                    compute_monthly();
+                    needs_redraw = true;
                     break;
 
                 case 4: // Set Total Budget
@@ -439,8 +463,10 @@ void run_dashboard_mode()
 
                 case 6: // Exit Dashboard
                     delete_bounded(budget_win);
+                    delete_bounded(breakdown_win);
                     delete_bounded(trans_win);
                     delete_bounded(action_win);
+                    delete_bounded(bar_win);
                     return;
                 }
             }

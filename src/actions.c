@@ -14,7 +14,7 @@ void add_category_dialog()
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Add Category ", false, ALIGN_CENTER);
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Add Category", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
     if (category_count >= MAX_CATEGORIES)
@@ -50,7 +50,7 @@ void add_category_dialog()
 
     categories[category_count].budget = amount;
     categories[category_count].spent = 0.0;
-    categories[category_count].bonus = 0.0;
+    categories[category_count].extra = 0.0;
     category_count++;
     save_data_to_file(); // Save after adding category
 
@@ -70,7 +70,7 @@ void remove_category_dialog()
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Remove Category ", false, ALIGN_CENTER);
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Remove Category", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
     if (category_count == 0)
@@ -132,23 +132,20 @@ void remove_category_dialog()
         // Check if there are any transactions using this category
         for (int i = 0; i < transaction_count; i++)
         {
-            if (transactions[i].category_id == cat_choice)
+            if (strcmp(transactions[i].cat_name, categories[cat_choice].name) == 0)
             {
-                transactions[i].category_id = -1; // Set to uncategorized
+                strcpy(transactions[i].cat_name, "Uncategorized");
             }
-            else if (transactions[i].category_id > cat_choice)
+            else if (strcmp(transactions[i].cat_name, categories[cat_choice].name) > 0)
             {
-                transactions[i].category_id--; // Adjust category IDs for shifted categories
+                strcpy(transactions[i].cat_name, categories[cat_choice - 1].name);
             }
         }
 
         // Remove the category by shifting all categories after it one position back
         for (int i = cat_choice; i < category_count - 1; i++)
         {
-            strcpy(categories[i].name, categories[i + 1].name);
-            categories[i].budget = categories[i + 1].budget;
-            categories[i].spent = categories[i + 1].spent;
-            categories[i].bonus = categories[i + 1].bonus;
+            categories[i] = categories[i + 1];
         }
 
         category_count--;
@@ -171,11 +168,12 @@ void set_budget_dialog()
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Set Total Budget ", false, ALIGN_CENTER);
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Set Total Budget", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
     // Current budget
     mvwprintw(dialog.textbox, 2, 0, "Current Budget: $%.2f", total_budget);
+    wmove(dialog.textbox, 3, 0);
     wnoutrefresh(dialog.textbox);
 
     double new_budget = -1.0;
@@ -187,7 +185,7 @@ void set_budget_dialog()
     // Check if input was canceled
     if (new_budget == -1.0)
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
     const char *confirm_message[2];
@@ -197,17 +195,17 @@ void set_budget_dialog()
     int confirm = get_confirmation(dialog.textbox, confirm_message, 1);
     if (confirm == 1) // no selected
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
     total_budget = new_budget;
     save_data_to_file(); // Save after budget update
-    destroy_bounded(dialog);
+    delete_bounded(dialog);
 }
 
 // Helper function for adding a transaction in dashboard mode
-void add_transaction_dialog()
+void add_expense_dialog()
 {
     WINDOW *win = stdscr;
     int max_y, max_x;
@@ -218,7 +216,7 @@ void add_transaction_dialog()
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Add Transaction ", false, ALIGN_CENTER);
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Add Expense", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
     if (transaction_count >= MAX_TRANSACTIONS)
@@ -237,11 +235,12 @@ void add_transaction_dialog()
     // Temporary transaction data
     Transaction new_transaction;
     memset(&new_transaction, 0, sizeof(Transaction));
+    new_transaction.expense = true;
 
     // Get transaction description
     wrefresh(dialog.textbox);
 
-    if (!get_input(dialog.textbox, new_transaction.description, "Enter transaction description: ", MAX_NAME_LEN, INPUT_STRING))
+    if (!get_input(dialog.textbox, new_transaction.desc, "Enter transaction description: ", MAX_NAME_LEN, INPUT_STRING))
     {
         destroy_bounded(dialog);
         return; // User canceled
@@ -263,13 +262,7 @@ void add_transaction_dialog()
         return;
     }
 
-    new_transaction.amount = amount;
-
-    // Get date
-    // mvwprintw(dialog.textbox, 8, 0, "Enter date (DD-MM-YYYY): ");
-    // // Set default date to empty for now - our function will handle defaults
-    // mvwprintw(dialog.textbox, 9, 0, "(Use arrow keys or Type)");
-    // wrefresh(dialog.textbox);
+    new_transaction.amt = amount;
 
     char date_buffer[11] = "";
     if (!get_date_input(dialog.textbox, date_buffer, "Enter date (DD-MM-YYYY): "))
@@ -292,7 +285,7 @@ void add_transaction_dialog()
         dialog_height = max_y - 4; // Cap at reasonable size
     }
 
-    dialog = draw_bounded_with_title(dialog_height, dialog_width, (max_y - dialog_height) / 2, start_x, " Select Category ", false, ALIGN_CENTER);
+    dialog = draw_bounded_with_title(dialog_height, dialog_width, (max_y - dialog_height) / 2, start_x, "Select Category", false, ALIGN_CENTER);
 
     // Create dynamic menu for categories
     char **category_menu = malloc(category_count * sizeof(char *));
@@ -320,7 +313,7 @@ void add_transaction_dialog()
         sprintf(category_menu[i], "%d. %s", i + 1, categories[i].name);
     }
 
-    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this transaction:", (const char **)category_menu, category_count, 6);
+    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6);
 
     // Free allocated memory
     for (int i = 0; i < category_count; i++)
@@ -335,7 +328,7 @@ void add_transaction_dialog()
         return;
     }
 
-    new_transaction.category_id = cat_choice;
+    strcpy(new_transaction.cat_name, categories[cat_choice].name);
 
     // Find where to insert the new transaction by date (most recent first)
     int insert_pos = 0;
@@ -366,7 +359,7 @@ void add_transaction_dialog()
     transaction_count++;
     save_data_to_file(); // Save after adding transaction
 
-    destroy_bounded(dialog);
+    delete_bounded(dialog);
 }
 
 // Add function to remove transactions
@@ -382,12 +375,12 @@ void remove_transaction_dialog()
     int max_display = 10; // Maximum number of transactions to display at once
     int display_count = transaction_count < max_display ? transaction_count : max_display;
 
-    int dialog_height = display_count + 8;
+    int dialog_height = display_count > 1 ? display_count + 8 : 10;
     int dialog_width = 70;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, " Remove Transaction ", false, ALIGN_CENTER);
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Remove Transaction", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
     if (transaction_count == 0)
@@ -426,10 +419,7 @@ void remove_transaction_dialog()
     }
 
     char category_name[MAX_NAME_LEN] = "Uncategorized";
-    if (transactions[trans_choice].category_id >= 0 && transactions[trans_choice].category_id < category_count)
-    {
-        strcpy(category_name, categories[transactions[trans_choice].category_id].name);
-    }
+    strcpy(category_name, transactions[trans_choice].cat_name);
 
     // Format date for display
     char display_date[11];
@@ -450,8 +440,8 @@ void remove_transaction_dialog()
 
     char message_buffer[4][100];
     sprintf(message_buffer[0], "Date: %s", display_date);
-    sprintf(message_buffer[1], "Description: %s", transactions[trans_choice].description);
-    sprintf(message_buffer[2], "Amount: $%.2f", transactions[trans_choice].amount);
+    sprintf(message_buffer[1], "Description: %s", transactions[trans_choice].desc);
+    sprintf(message_buffer[2], "Amount: $%.2f", transactions[trans_choice].amt);
     sprintf(message_buffer[3], "Category: %s", category_name);
     confirm_message[0] = "Are you sure you want to remove this transaction?";
     confirm_message[1] = message_buffer[0];
@@ -472,5 +462,5 @@ void remove_transaction_dialog()
         save_data_to_file(); // Save after removing transaction
     }
 
-    destroy_bounded(dialog);
+    delete_bounded(dialog);
 }

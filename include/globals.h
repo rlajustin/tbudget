@@ -29,14 +29,15 @@ typedef struct
     char name[MAX_NAME_LEN];
     double budget;
     double spent;
-    double bonus;
+    double extra;
 } Category;
 
 typedef struct
 {
-    char description[MAX_NAME_LEN];
-    double amount;
-    int category_id;
+    bool expense;
+    double amt;
+    char desc[MAX_NAME_LEN];
+    char cat_name[MAX_NAME_LEN];
     char date[11]; // Format: YYYY-MM-DD
 } Transaction;
 

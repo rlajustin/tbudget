@@ -8,6 +8,7 @@
 #include <time.h>
 #include "globals.h"
 #include "utils.h"
+#include "piechart.h"
 
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1
@@ -54,6 +55,7 @@ int get_date_input(WINDOW *win, char *date_buffer, char* prompt);
 // dashboard display
 void display_categories(WINDOW *win, int start_y);
 void display_transactions(WINDOW *win, int start_y);
+BoundedWindow draw_bar_chart(WINDOW *win);
 
 // other helper
 void format_date(WINDOW *win, int y, int x, int day, int month, int year, int highlighted_field, int cursor_positions[]);
