@@ -29,7 +29,6 @@ void setup_ncurses();
 void cleanup_ncurses();
 
 // bounded window methods
-void destroy_bounded(BoundedWindow win);
 void delete_bounded(BoundedWindow win);
 void bwresize(BoundedWindow win, int height, int width);  
 void bwmove(BoundedWindow win, int start_y, int start_x);
@@ -47,7 +46,7 @@ void draw_menu(WINDOW *win, int highlighted_item, const char *menu_items[], int 
 // getting input
 int get_confirmation(WINDOW *win, const char *message[], int item_count);
 int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int start_y, int allow_back);
-int get_scrollable_menu_choice(WINDOW *win, char* prompt, const char *menu_items[], int item_count, int max_visible_items);
+int get_scrollable_menu_choice(WINDOW *win, char* prompt, const char *menu_items[], int item_count, int max_visible_items, int start_y);
 int get_transaction_choice(WINDOW *win, const Transaction transactions[], int transaction_count, int max_visible_items);
 int get_input(WINDOW *win, void *return_value, char* prompt, int max_len, InputType type);
 int get_date_input(WINDOW *win, char *date_buffer, char* prompt);

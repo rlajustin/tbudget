@@ -167,7 +167,7 @@ void run_menu_mode()
     {
         clear();
         draw_title(stdscr, "TBudget - Budget Management Tool");
-        char* month = get_month_name();
+        char *month = get_month_name();
         mvprintw(5, 2, "%s Budget: $%.2f", month, total_budget);
 
         int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
@@ -201,10 +201,7 @@ void run_dashboard_mode()
     getmaxyx(win, max_y, max_x);
 
     // Calculate window sizes
-    int budget_height = max_y / 2;
-    int trans_height = max_y - budget_height - 1; // -1 for title bar and bottom bar
-    int action_width = max_x / 3;
-    int left_col_width = max_x - action_width;
+    int budget_height, trans_height, action_width, left_col_width;
     // Define active section (0 = budget, 1 = transactions, 2 = actions)
     int active_section = 2; // Start with actions menu
 
@@ -241,7 +238,7 @@ void run_dashboard_mode()
             getmaxyx(win, max_y, max_x);
             budget_height = max_y / 2;
             trans_height = max_y - budget_height - 2;
-            action_width = max_x / 3;
+            action_width = max_x / 5;
             left_col_width = max_x - action_width;
 
             delete_bounded(budget_win);
@@ -250,10 +247,11 @@ void run_dashboard_mode()
             delete_bounded(action_win);
             delete_bounded(bar_win);
 
-            budget_win = draw_bounded_with_title(budget_height - 4, left_col_width / 2 - 4, 3, 2, "Budget Summary", active_section == 0, ALIGN_LEFT);
-            breakdown_win = draw_bounded_with_title(budget_height - 4, left_col_width - left_col_width / 2 - 4, 3, left_col_width / 2 + 2, "Budget Breakdown", false, ALIGN_LEFT);
-            trans_win = draw_bounded_with_title(trans_height - 4, left_col_width, budget_height + 3, 2, "Transaction History", active_section == 1, ALIGN_LEFT);
-            action_win = draw_bounded_with_title(max_y - 6, action_width - 4, 3, max_x - action_width + 2, "Actions", active_section == 2, ALIGN_LEFT);
+            action_win = draw_bounded_with_title(budget_height - 4, action_width - 4, 3, 2, "Actions", active_section == 2, ALIGN_LEFT);
+            budget_win = draw_bounded_with_title(budget_height - 4, left_col_width / 2 - 4, 3, action_width + 2, "Budget Summary", active_section == 0, ALIGN_LEFT);
+            breakdown_win = draw_bounded_with_title(budget_height - 4, left_col_width - left_col_width / 2 - 4, 3, action_width + left_col_width / 2 + 2, "Budget Breakdown", false, ALIGN_LEFT);
+            // trans_win = draw_bounded_with_title(trans_height - 4, left_col_width, budget_height + 3, action_width + 2, "Transaction History", active_section == 1, ALIGN_LEFT);
+            trans_win = draw_bounded_with_title(trans_height - 4, max_x - 4, budget_height + 3, 2, "Transaction History", active_section == 1, ALIGN_LEFT);
 
             // Key help line
             char *help_text = is_leaving ? "Exiting tbudget, press Q again to confirm" : "TAB to switch sections | P to toggle pie chart | ENTER to select | Q to quit";
@@ -262,7 +260,7 @@ void run_dashboard_mode()
             mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
             mvwprintw(win, max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
 
-            char* month = get_month_name();
+            char *month = get_month_name();
             // Display budget summary
             mvwprintw(budget_win.textbox, 1, 2, "%s Budget: $%.2f", month, total_budget);
             if (category_count > 0)
@@ -316,7 +314,8 @@ void run_dashboard_mode()
             bwnoutrefresh(action_win);
             bwnoutrefresh(breakdown_win);
             // Only refresh bar_win if it has valid windows
-            if (bar_win.textbox != NULL && bar_win.boundary != NULL) {
+            if (bar_win.textbox != NULL && bar_win.boundary != NULL)
+            {
                 bwnoutrefresh(bar_win);
             }
             doupdate();

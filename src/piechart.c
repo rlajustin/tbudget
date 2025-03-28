@@ -13,6 +13,7 @@ static const short pie_colors[][2] = {
     {COLOR_WHITE, COLOR_RED},
     {COLOR_WHITE, COLOR_YELLOW},
     {COLOR_WHITE, COLOR_WHITE},
+    {COLOR_WHITE, COLOR_BLACK},
 };
 
 static const short pie_colors_darker[][2] = {
@@ -23,6 +24,7 @@ static const short pie_colors_darker[][2] = {
     {COLOR_BLACK, COLOR_RED},
     {COLOR_BLACK, COLOR_YELLOW},
     {COLOR_BLACK, COLOR_WHITE},
+    {COLOR_BLACK, COLOR_BLACK},
 };
 
 // These are now defined in piechart.h
@@ -171,7 +173,7 @@ void display_budget_pie_chart(WINDOW *win, double width, double height)
         return;
     }
 
-    PieSlice slices[MAX_CATEGORIES + 1];
+    PieSlice slices[NUM_PIE_COLORS] = {0};
     int slice_count = 0;
     double used_budget = 0.0;
 
@@ -180,16 +182,24 @@ void display_budget_pie_chart(WINDOW *win, double width, double height)
         if (categories[i].budget > 0)
         {
             used_budget += categories[i].budget;
-            slices[slice_count].percentage = (categories[i].budget / total_budget) * 100.0;
-            slices[slice_count].color_pair = PIE_COLOR_START + (i % NUM_PIE_COLORS);
-            strncpy(slices[slice_count].label, categories[i].name, MAX_NAME_LEN - 1);
-            slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
-            slice_count++;
+            if (i >= NUM_PIE_COLORS - 1)
+            {
+                strcpy(slices[slice_count - 1].label, "Other");
+                slices[slice_count - 1].percentage += (categories[i].budget / total_budget) * 100.0;
+            }
+            else
+            {
+                slices[slice_count].percentage = (categories[i].budget / total_budget) * 100.0;
+                slices[slice_count].color_pair = PIE_COLOR_START + i;
+                strncpy(slices[slice_count].label, categories[i].name, MAX_NAME_LEN - 1);
+                slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
+                slice_count++;
+            }
         }
     }
     slices[slice_count].percentage = 100.0 - used_budget;
     slices[slice_count].color_pair = PIE_COLOR_START + NUM_PIE_COLORS - 1;
-    strncpy(slices[slice_count].label, "Unallocated", MAX_NAME_LEN - 1);
+    strncpy(slices[slice_count].label, "Savings", MAX_NAME_LEN - 1);
     slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
     slice_count++;
 

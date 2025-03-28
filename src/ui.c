@@ -91,7 +91,7 @@ BoundedWindow draw_bounded_with_title(int height, int width, int start_y, int st
 void draw_title(WINDOW *win, const char *title)
 {
   int width = getmaxx(win);
-  wattron(win, COLOR_PAIR(1));
+  wattron(win, A_BOLD | COLOR_PAIR(3));
 
   for (int i = 0; i < width; i++)
   {
@@ -99,7 +99,7 @@ void draw_title(WINDOW *win, const char *title)
   }
 
   mvwprintw(win, 0, (width - strlen(title)) / 2, "%s", title);
-  wattroff(win, COLOR_PAIR(1));
+  wattroff(win, A_BOLD | COLOR_PAIR(3));
 }
 
 void draw_menu(WINDOW *win, int highlighted_item, const char *menu_items[], int item_count, int start_y)
@@ -153,15 +153,6 @@ void draw_error(BoundedWindow win, const char *message)
   wnoutrefresh(win.textbox);
   doupdate();
   getch();
-  delwin(win.boundary);
-  delwin(win.textbox);
-  touchwin(stdscr);
-  wnoutrefresh(stdscr);
-  doupdate();
-}
-
-void destroy_bounded(BoundedWindow win)
-{
   delwin(win.boundary);
   delwin(win.textbox);
   touchwin(stdscr);
@@ -307,7 +298,7 @@ int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int s
   }
 }
 
-int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items[], int item_count, int max_visible_items)
+int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items[], int item_count, int max_visible_items, int start_y)
 {
   int start_index = 0;
   int visible_items = max_visible_items;
@@ -316,7 +307,11 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
 
   keypad(win, TRUE); // Enable arrow keys
 
-  mvwprintw(win, 1, 0, "%s", prompt);
+  mvwprintw(win, start_y, 0, "%s", prompt);
+
+  char number_buffer[10] = {0};
+  int buffer_pos = 0;
+  time_t last_input_time = 0;
 
   while (1)
   {
@@ -325,19 +320,19 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
       // Add scroll indicators if needed
       if (start_index > 0)
       {
-        mvwprintw(win, 1, getmaxx(win) - 3, "^");
+        mvwprintw(win, start_y + 1, getmaxx(win) - 3, "^");
       }
       else
       {
-        mvwprintw(win, 1, getmaxx(win) - 3, " ");
+        mvwprintw(win, start_y + 1, getmaxx(win) - 3, " ");
       }
       if (start_index + visible_items < item_count)
       {
-        mvwprintw(win, 2 + visible_items, getmaxx(win) - 3, "v");
+        mvwprintw(win, start_y + 2 + visible_items, getmaxx(win) - 3, "v");
       }
       else
       {
-        mvwprintw(win, 2 + visible_items, getmaxx(win) - 3, " ");
+        mvwprintw(win, start_y + 2 + visible_items, getmaxx(win) - 3, " ");
       }
 
       for (int i = start_index; i < start_index + visible_items && i < item_count; i++)
@@ -349,7 +344,9 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
         }
 
         // Print the row
-        mvwprintw(win, 2 + i - start_index, 0, "%s", menu_items[i]);
+        wmove(win, start_y + 2 + i - start_index, 0);
+        wclrtoeol(win);
+        wprintw(win, "%s", menu_items[i]);
         // Turn off highlighting after printing
         if (i == current_highlighted)
         {
@@ -365,6 +362,63 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
 
     switch (ch)
     {
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    {
+      time_t current_time = time(NULL);
+      if (current_time - last_input_time > 1)
+      { // 1 second timeout
+        buffer_pos = 0;
+        memset(number_buffer, 0, sizeof(number_buffer));
+      }
+      last_input_time = current_time;
+
+      // Add digit to buffer
+      if (buffer_pos < (int)sizeof(number_buffer) - 1)
+      {
+        number_buffer[buffer_pos++] = ch;
+        number_buffer[buffer_pos] = '\0';
+      }
+
+      // Convert buffer to number and jump to that position
+      int selected_index = atoi(number_buffer) - 1; // Convert to 0-based index
+      if (selected_index >= item_count)
+      {
+        // flush buffer
+        buffer_pos = 0;
+        memset(number_buffer, 0, sizeof(number_buffer));
+        number_buffer[buffer_pos++] = ch;
+        number_buffer[buffer_pos] = '\0';
+        selected_index = atoi(number_buffer) - 1;
+      }
+
+      // Validate the index
+      if (selected_index >= 0 && selected_index < item_count)
+      {
+        current_highlighted = selected_index;
+
+        // Adjust scroll position if needed
+        if (current_highlighted < start_index)
+        {
+          start_index = current_highlighted;
+        }
+        else if (current_highlighted >= start_index + visible_items)
+        {
+          start_index = current_highlighted - visible_items + 1;
+        }
+
+        redraw = true;
+      }
+      continue;
+    }
     case KEY_UP:
       if (current_highlighted > 0)
       {
@@ -372,6 +426,16 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
         if (current_highlighted < start_index)
         {
           start_index = current_highlighted;
+        }
+        redraw = true;
+      }
+      else
+      {
+        current_highlighted = item_count - 1;
+        start_index = current_highlighted - visible_items + 1;
+        if (start_index < 0)
+        {
+          start_index = 0;
         }
         redraw = true;
       }
@@ -385,6 +449,12 @@ int get_scrollable_menu_choice(WINDOW *win, char *prompt, const char *menu_items
         {
           start_index = current_highlighted - visible_items + 1;
         }
+        redraw = true;
+      }
+      else
+      {
+        current_highlighted = 0;
+        start_index = 0;
         redraw = true;
       }
       continue;
@@ -1011,7 +1081,7 @@ void display_categories(WINDOW *win, int start_y)
     // Display color block for pie chart legend
     if (categories[i].budget > 0)
     {
-      int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS ? NUM_PIE_COLORS - 1 : i);
+      int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS - 1 ? NUM_PIE_COLORS - 2 : i);
       wattron(win, COLOR_PAIR(color_pair));
       mvwprintw(win, y, 2, "  ");
       wattroff(win, COLOR_PAIR(color_pair));
@@ -1032,7 +1102,7 @@ void display_categories(WINDOW *win, int start_y)
     double savings = total_budget - total_allocated;
     double savings_percent = (savings / total_budget) * 100.0;
     wattron(win, COLOR_PAIR(PIE_COLOR_START + NUM_PIE_COLORS - 1));
-    mvwprintw(win, y, 2, "  ");
+    mvwprintw(win, y, 2, "[]");
     wattroff(win, COLOR_PAIR(PIE_COLOR_START + NUM_PIE_COLORS - 1));
     mvwprintw(win, y++, 4, " %-27s %-15s $%.2f (%.2f%%)",
               "Savings", " ", savings, savings_percent);

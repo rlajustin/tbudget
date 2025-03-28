@@ -8,7 +8,7 @@
 
 // Define additional color pairs for the pie chart
 #define PIE_COLOR_START 10  // Start from 10 to avoid conflicts with existing colors
-#define NUM_PIE_COLORS 7    // Number of distinct colors used for pie chart - must match size of pie_colors array
+#define NUM_PIE_COLORS 8    // Number of distinct colors used for pie chart - must match size of pie_colors array
 #define PIE_DARKER_COLOR_START (PIE_COLOR_START + NUM_PIE_COLORS)
 
 // Structure to hold a slice of the pie

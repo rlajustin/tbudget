@@ -28,7 +28,7 @@ void add_category_dialog()
 
     if (!get_input(dialog.textbox, categories[category_count].name, "Enter category name: ", MAX_NAME_LEN, INPUT_STRING))
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return; // User canceled
     }
 
@@ -44,7 +44,7 @@ void add_category_dialog()
     // Check if input was canceled
     if (amount == -1.0)
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
@@ -54,7 +54,7 @@ void add_category_dialog()
     category_count++;
     save_data_to_file(); // Save after adding category
 
-    destroy_bounded(dialog);
+    delete_bounded(dialog);
 }
 
 // Helper function for removing a category in dashboard mode
@@ -65,7 +65,7 @@ void remove_category_dialog()
     getmaxyx(win, max_y, max_x);
 
     // Calculate dialog size based on number of categories
-    int dialog_height = category_count + 8;
+    int dialog_height = 10;
     int dialog_width = 60;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
@@ -105,7 +105,7 @@ void remove_category_dialog()
         sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[i].name, categories[i].budget);
     }
 
-    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6);
+    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6, 1);
 
     // Free allocated memory
     for (int i = 0; i < category_count; i++)
@@ -116,7 +116,7 @@ void remove_category_dialog()
 
     if (cat_choice == -1)
     { // User pressed backspace or escape
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
@@ -152,7 +152,7 @@ void remove_category_dialog()
         save_data_to_file(); // Save after removing category
     }
 
-    destroy_bounded(dialog);
+    delete_bounded(dialog);
 }
 
 // Helper function for setting budget in dashboard mode
@@ -242,7 +242,7 @@ void add_expense_dialog()
 
     if (!get_input(dialog.textbox, new_transaction.desc, "Enter transaction description: ", MAX_NAME_LEN, INPUT_STRING))
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return; // User canceled
     }
 
@@ -258,7 +258,7 @@ void add_expense_dialog()
     // Check if input was canceled
     if (amount == -1.0)
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
@@ -267,7 +267,7 @@ void add_expense_dialog()
     char date_buffer[11] = "";
     if (!get_date_input(dialog.textbox, date_buffer, "Enter date (DD-MM-YYYY): "))
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return; // User canceled
     }
 
@@ -276,7 +276,7 @@ void add_expense_dialog()
     new_transaction.date[10] = '\0';
 
     // Clean up previous dialog
-    destroy_bounded(dialog);
+    wclear(dialog.textbox);
 
     // Create a new dialog for category selection
     dialog_height = category_count + 6;
@@ -285,7 +285,7 @@ void add_expense_dialog()
         dialog_height = max_y - 4; // Cap at reasonable size
     }
 
-    dialog = draw_bounded_with_title(dialog_height, dialog_width, (max_y - dialog_height) / 2, start_x, "Select Category", false, ALIGN_CENTER);
+    // dialog = draw_bounded_with_title(dialog_height, dialog_width, (max_y - dialog_height) / 2, start_x, "Select Category", false, ALIGN_CENTER);
 
     // Create dynamic menu for categories
     char **category_menu = malloc(category_count * sizeof(char *));
@@ -313,7 +313,7 @@ void add_expense_dialog()
         sprintf(category_menu[i], "%d. %s", i + 1, categories[i].name);
     }
 
-    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6);
+    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6, 1);
 
     // Free allocated memory
     for (int i = 0; i < category_count; i++)
@@ -324,7 +324,7 @@ void add_expense_dialog()
 
     if (cat_choice == -1)
     { // User pressed backspace or ESC
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
@@ -414,7 +414,7 @@ void remove_transaction_dialog()
 
     if (trans_choice == -1)
     {
-        destroy_bounded(dialog);
+        delete_bounded(dialog);
         return;
     }
 
