@@ -13,6 +13,10 @@
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1
 #define ALIGN_RIGHT 2
+#define MAX_CHILD_WINDOWS 5  // Maximum number of child windows
+
+// Forward declaration for the structure
+typedef struct BoundedWindow BoundedWindow;
 
 typedef enum InputType {
   INPUT_STRING,
@@ -20,19 +24,30 @@ typedef enum InputType {
   INPUT_INT,
 } InputType;
 
-typedef struct {
+// Simplified BoundedWindow structure with children
+struct BoundedWindow {
   WINDOW *textbox;
   WINDOW *boundary;
-} BoundedWindow;
+  BoundedWindow **children;     // Array of child windows
+  int child_count;              // Number of child windows
+};
 
 void setup_ncurses();
 void cleanup_ncurses();
 
 // bounded window methods
 void delete_bounded(BoundedWindow win);
-void bwresize(BoundedWindow win, int height, int width);  
+void delete_bounded_array(BoundedWindow* windows[], int count);
+void bwresize(BoundedWindow win, int height, int width);
 void bwmove(BoundedWindow win, int start_y, int start_x);
 void bwnoutrefresh(BoundedWindow win);
+void bwarrnoutrefresh(BoundedWindow* windows[], int count);
+
+// New functions for parent-child relationship
+BoundedWindow *create_bounded_window();
+void add_child_window(BoundedWindow *parent, BoundedWindow *child);
+void delete_bounded_with_children(BoundedWindow *win);
+void bw_hierarchy_refresh(BoundedWindow win);
 
 // just drawing
 BoundedWindow draw_bounded(int height, int width, int start_y, int start_x, bool highlight);
@@ -54,7 +69,8 @@ int get_date_input(WINDOW *win, char *date_buffer, char* prompt);
 // dashboard display
 void display_categories(WINDOW *win, int start_y);
 void display_transactions(WINDOW *win, int start_y);
-BoundedWindow draw_bar_chart(WINDOW *win);
+BoundedWindow draw_bar_chart(WINDOW *parent);
+BoundedWindow *create_bar_chart(BoundedWindow *parent);
 
 // other helper
 void format_date(WINDOW *win, int y, int x, int day, int month, int year, int highlighted_field, int cursor_positions[]);

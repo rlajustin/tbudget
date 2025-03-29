@@ -392,20 +392,20 @@ void remove_transaction_dialog()
 
     // Ensure transactions are sorted with most recent first
     // This sort has already been done in display_transactions
-    for (int i = 0; i < transaction_count - 1; i++)
-    {
-        for (int j = 0; j < transaction_count - i - 1; j++)
-        {
-            // Compare dates (format is YYYY-MM-DD so string comparison works)
-            if (strcmp(transactions[j].date, transactions[j + 1].date) < 0)
-            {
-                // Swap transactions
-                Transaction temp = transactions[j];
-                transactions[j] = transactions[j + 1];
-                transactions[j + 1] = temp;
-            }
-        }
-    }
+    // for (int i = 0; i < transaction_count - 1; i++)
+    // {
+    //     for (int j = 0; j < transaction_count - i - 1; j++)
+    //     {
+    //         // Compare dates (format is YYYY-MM-DD so string comparison works)
+    //         if (strcmp(transactions[j].date, transactions[j + 1].date) < 0)
+    //         {
+    //             // Swap transactions
+    //             Transaction temp = transactions[j];
+    //             transactions[j] = transactions[j + 1];
+    //             transactions[j + 1] = temp;
+    //         }
+    //     }
+    // }
 
     mvwprintw(dialog.textbox, 1, 0, "Select a transaction to remove:");
     wrefresh(dialog.textbox);

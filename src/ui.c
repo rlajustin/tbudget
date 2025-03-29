@@ -56,7 +56,19 @@ BoundedWindow draw_bounded(int height, int width, int start_y, int start_x, bool
   box(boundary, 0, 0);
   wattroff(boundary, A_BOLD | COLOR_PAIR(4));
 
-  BoundedWindow result = {dialog, boundary};
+  BoundedWindow result = {dialog, boundary, NULL, 0};
+
+  // Allocate memory for children array
+  result.children = (BoundedWindow **)malloc(sizeof(BoundedWindow *) * MAX_CHILD_WINDOWS);
+  if (result.children == NULL)
+  {
+    // Handle memory allocation failure
+    delwin(dialog);
+    delwin(boundary);
+    result.textbox = NULL;
+    result.boundary = NULL;
+  }
+
   return result;
 }
 
@@ -71,20 +83,35 @@ BoundedWindow draw_bounded_with_title(int height, int width, int start_y, int st
   box(boundary, 0, 0);
   wattroff(boundary, A_BOLD | COLOR_PAIR(4));
 
-  if (alignment == ALIGN_CENTER)
+  if (title != NULL && strlen(title) > 0)
   {
-    mvwprintw(boundary, 0, (width - strlen(title)) / 2, " %s ", title);
-  }
-  else if (alignment == ALIGN_LEFT)
-  {
-    mvwprintw(boundary, 0, 5, " %s ", title);
-  }
-  else if (alignment == ALIGN_RIGHT)
-  {
-    mvwprintw(boundary, 0, width - strlen(title) - 5, " %s ", title);
+    if (alignment == ALIGN_CENTER)
+    {
+      mvwprintw(boundary, 0, (width - strlen(title)) / 2, " %s ", title);
+    }
+    else if (alignment == ALIGN_LEFT)
+    {
+      mvwprintw(boundary, 0, 5, " %s ", title);
+    }
+    else if (alignment == ALIGN_RIGHT)
+    {
+      mvwprintw(boundary, 0, width - strlen(title) - 5, " %s ", title);
+    }
   }
 
-  BoundedWindow result = {dialog, boundary};
+  BoundedWindow result = {dialog, boundary, NULL, 0};
+
+  // Allocate memory for children array
+  result.children = (BoundedWindow **)malloc(sizeof(BoundedWindow *) * MAX_CHILD_WINDOWS);
+  if (result.children == NULL)
+  {
+    // Handle memory allocation failure
+    delwin(dialog);
+    delwin(boundary);
+    result.textbox = NULL;
+    result.boundary = NULL;
+  }
+
   return result;
 }
 
@@ -146,6 +173,7 @@ BoundedWindow draw_alert_persistent(const char *title, const char *message[], in
   getch();
   return alert;
 }
+
 void draw_error(BoundedWindow win, const char *message)
 {
   mvwprintw(win.textbox, 1, 0, "%s", message);
@@ -163,6 +191,22 @@ void draw_error(BoundedWindow win, const char *message)
 // does not trigger refresh
 void delete_bounded(BoundedWindow win)
 {
+  // First, delete all child windows
+  for (int i = 0; i < win.child_count; i++)
+  {
+    if (win.children[i] != NULL)
+    {
+      delete_bounded(*win.children[i]);
+    }
+  }
+
+  // Free the children array
+  if (win.children != NULL)
+  {
+    free(win.children);
+  }
+
+  // Delete the windows
   if (win.boundary != NULL)
   {
     delwin(win.boundary);
@@ -170,6 +214,17 @@ void delete_bounded(BoundedWindow win)
   if (win.textbox != NULL)
   {
     delwin(win.textbox);
+  }
+}
+
+void delete_bounded_array(BoundedWindow *windows[], int count)
+{
+  for (int i = 0; i < count; i++)
+  {
+    if (windows[i]->boundary != NULL && windows[i]->textbox != NULL)
+    {
+      delete_bounded(*windows[i]);
+    }
   }
 }
 
@@ -187,8 +242,36 @@ void bwmove(BoundedWindow win, int start_y, int start_x)
 
 void bwnoutrefresh(BoundedWindow win)
 {
-  wnoutrefresh(win.boundary);
-  wnoutrefresh(win.textbox);
+
+  // Then refresh this window
+  if (win.boundary != NULL)
+  {
+    wnoutrefresh(win.boundary);
+  }
+  if (win.textbox != NULL)
+  {
+    wnoutrefresh(win.textbox);
+  }
+  
+  // First refresh all child windows (bottom-up)
+  for (int i = 0; i < win.child_count; i++)
+  {
+    if (win.children[i] != NULL)
+    {
+      bwnoutrefresh(*win.children[i]);
+    }
+  }
+}
+
+void bwarrnoutrefresh(BoundedWindow *windows[], int count)
+{
+  for (int i = 0; i < count; i++)
+  {
+    if (windows[i]->textbox != NULL && windows[i]->boundary != NULL)
+    {
+      bwnoutrefresh(*windows[i]);
+    }
+  }
 }
 
 int get_confirmation(WINDOW *win, const char *message[], int item_count)
@@ -855,15 +938,15 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
     if (transaction_count > 0)
     {
       char temp[5];
-      strncpy(temp, transactions[transaction_count - 1].date, 4);
+      strncpy(temp, transactions[0].date, 4);
       temp[4] = '\0';
       year = atoi(temp);
 
-      strncpy(temp, transactions[transaction_count - 1].date + 5, 2);
+      strncpy(temp, transactions[0].date + 5, 2);
       temp[2] = '\0';
       month = atoi(temp);
 
-      strncpy(temp, transactions[transaction_count - 1].date + 8, 2);
+      strncpy(temp, transactions[0].date + 8, 2);
       temp[2] = '\0';
       day = atoi(temp);
     }
@@ -1240,14 +1323,14 @@ void format_date(WINDOW *win, int y, int x, int day, int month, int year,
   }
 }
 
-BoundedWindow draw_bar_chart(WINDOW *win)
+BoundedWindow draw_bar_chart(WINDOW *parent_win)
 {
   double total_spent = 0.0;
   double total_budget_allocated = 0.0;
 
   int y, x, start_y, start_x;
-  getmaxyx(win, y, x);
-  getbegyx(win, start_y, start_x);
+  getmaxyx(parent_win, y, x);
+  getbegyx(parent_win, start_y, start_x);
 
   // First calculate totals and prepare data
   for (int i = 0; i < category_count; i++)
@@ -1268,12 +1351,12 @@ BoundedWindow draw_bar_chart(WINDOW *win)
   // Skip if nothing spent
   if (total_spent <= 0)
   {
-    mvwprintw(win, y - 5, 1, "No spending recorded yet");
+    mvwprintw(parent_win, y - 5, 1, "No spending recorded yet");
     return bar_win;
   }
 
   // Title for bar chart
-  mvwprintw(win, y - 5, 1, "Spending Distribution");
+  mvwprintw(parent_win, y - 5, 1, "Spending Distribution");
 
   // Sort categories by spent amount for the bar chart (highest to lowest)
   typedef struct
@@ -1339,4 +1422,126 @@ BoundedWindow draw_bar_chart(WINDOW *win)
     current_pos++;
   }
   return bar_win;
+}
+
+// Create a new bounded window with initialization
+BoundedWindow *create_bounded_window()
+{
+  BoundedWindow *win = (BoundedWindow *)malloc(sizeof(BoundedWindow));
+  if (win == NULL)
+  {
+    return NULL; // Memory allocation failed
+  }
+
+  win->textbox = NULL;
+  win->boundary = NULL;
+  win->children = (BoundedWindow **)malloc(sizeof(BoundedWindow *) * MAX_CHILD_WINDOWS);
+  win->child_count = 0;
+
+  if (win->children == NULL)
+  {
+    free(win);
+    return NULL; // Memory allocation failed
+  }
+
+  return win;
+}
+
+// Add a child window to a parent window
+void add_child_window(BoundedWindow *parent, BoundedWindow *child)
+{
+  if (parent == NULL || child == NULL || parent->child_count >= MAX_CHILD_WINDOWS)
+  {
+    return;
+  }
+
+  // Allocate memory for the child and copy it
+  BoundedWindow *new_child = (BoundedWindow *)malloc(sizeof(BoundedWindow));
+  if (new_child == NULL)
+  {
+    return; // Memory allocation failed
+  }
+
+  // Copy the child window
+  *new_child = *child;
+
+  // Add it to the parent's children
+  parent->children[parent->child_count++] = new_child;
+}
+
+// Recursively delete a bounded window and all its children
+void delete_bounded_with_children(BoundedWindow *win)
+{
+  if (win == NULL)
+  {
+    return;
+  }
+
+  // First delete all child windows (bottom-up)
+  for (int i = 0; i < win->child_count; i++)
+  {
+    delete_bounded_with_children(win->children[i]);
+  }
+
+  // Free the children array
+  if (win->children != NULL)
+  {
+    free(win->children);
+  }
+
+  // Delete the ncurses windows
+  if (win->boundary != NULL)
+  {
+    delwin(win->boundary);
+  }
+  if (win->textbox != NULL)
+  {
+    delwin(win->textbox);
+  }
+
+  // Free the window structure itself
+  free(win);
+}
+
+// Refresh a window and all its children (bottom-up)
+void bw_hierarchy_refresh(BoundedWindow win)
+{
+  // First refresh all child windows (bottom-up)
+  for (int i = 0; i < win.child_count; i++)
+  {
+    if (win.children[i] != NULL)
+    {
+      bw_hierarchy_refresh(*win.children[i]);
+    }
+  }
+
+  // Then refresh this window
+  if (win.textbox != NULL && win.boundary != NULL)
+  {
+    wnoutrefresh(win.textbox);
+    wnoutrefresh(win.boundary);
+  }
+}
+
+// New function to create a bar chart and add it as a child window
+BoundedWindow *create_bar_chart(BoundedWindow *parent)
+{
+  if (parent == NULL || parent->textbox == NULL)
+  {
+    return NULL;
+  }
+
+  // Create the bar chart
+  BoundedWindow bar_win = draw_bar_chart(parent->textbox);
+
+  // Add it as a child window to the parent
+  if (bar_win.textbox != NULL && bar_win.boundary != NULL)
+  {
+    add_child_window(parent, &bar_win);
+
+    // Return a pointer to the child that was added
+    return parent->children[parent->child_count - 1];
+  }
+
+  return NULL;
 }

@@ -4,7 +4,7 @@ LDFLAGS = -lncurses -lm
 
 TARGET = tbudget
 SRC_DIR = src
-SRC = $(SRC_DIR)/main.c $(SRC_DIR)/actions.c $(SRC_DIR)/utils.c $(SRC_DIR)/ui.c $(SRC_DIR)/globals.c $(SRC_DIR)/piechart.c
+SRC = $(SRC_DIR)/main.c $(SRC_DIR)/actions.c $(SRC_DIR)/utils.c $(SRC_DIR)/ui.c $(SRC_DIR)/globals.c $(SRC_DIR)/piechart.c $(SRC_DIR)/flexlayout.c
 PREFIX = /usr/local
 
 all: $(TARGET)
