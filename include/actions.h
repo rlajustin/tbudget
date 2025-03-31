@@ -12,6 +12,8 @@ void remove_category_dialog();
 void set_budget_dialog();
 void add_expense_dialog();
 void remove_transaction_dialog();
+void add_subscription_dialog();
+void remove_subscription_dialog();
 
 // Dashboard mode dialogs
 void budget_summary_dialog();

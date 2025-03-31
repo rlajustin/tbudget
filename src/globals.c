@@ -6,6 +6,8 @@ int category_count = 0;
 Transaction transactions[MAX_TRANSACTIONS];
 int transaction_count = 0;
 double total_budget = 0.0;
+Subscription subscriptions[MAX_SUBSCRIPTIONS];
+int subscription_count = 0;
 
 // Global file paths
 char app_data_dir[MAX_BUFFER];

@@ -105,7 +105,7 @@ void remove_category_dialog()
         sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[i].name, categories[i].budget);
     }
 
-    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6, 1);
+    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6, 1, true);
 
     // Free allocated memory
     for (int i = 0; i < category_count; i++)
@@ -310,10 +310,10 @@ void add_expense_dialog()
             draw_error(dialog, "Memory allocation error.");
             return;
         }
-        sprintf(category_menu[i], "%d. %s", i + 1, categories[i].name);
+        sprintf(category_menu[i], "%s", categories[i].name);
     }
 
-    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6, 1);
+    int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6, 1, true);
 
     // Free allocated memory
     for (int i = 0; i < category_count; i++)
@@ -506,7 +506,7 @@ void budget_summary_dialog()
     options_values[num_options] = 4;
     num_options++;
 
-    int option_choice = get_scrollable_menu_choice(dialog.textbox, "Select an option:", options_names, num_options, 5, 1);
+    int option_choice = get_scrollable_menu_choice(dialog.textbox, "Select an option:", options_names, num_options, 5, 1, true);
     if (option_choice == -1)
     {
         delete_bounded(dialog);
@@ -532,6 +532,340 @@ void budget_summary_dialog()
     case 4:
         break;
     }
-    
+
+    delete_bounded(dialog);
+}
+
+void add_subscription_dialog()
+{
+    WINDOW *win = stdscr;
+    int max_y, max_x;
+    getmaxyx(win, max_y, max_x);
+
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
+    int start_y = (max_y - dialog_height) / 2;
+    int start_x = (max_x - dialog_width) / 2;
+
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Add Subscription", false, ALIGN_CENTER);
+    wnoutrefresh(dialog.boundary);
+
+    if (subscription_count >= MAX_SUBSCRIPTIONS)
+    {
+        draw_error(dialog, "Maximum number of subscriptions reached.");
+        return;
+    }
+
+    // Create a new subscription
+    Subscription new_sub;
+    memset(&new_sub, 0, sizeof(Subscription));
+
+    // Get subscription name
+    if (!get_input(dialog.textbox, new_sub.name, "Enter subscription name: ", MAX_NAME_LEN, INPUT_STRING))
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+
+    if (!get_input(dialog.textbox, &new_sub.amount, "Enter amount: $", MAX_BUFFER, INPUT_DOUBLE))
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+
+    const char *type_menu[] = {
+        "Expense",
+        "Income"
+    };
+    int y, x;
+    getyx(dialog.textbox, y, x);
+    int type_choice = get_scrollable_menu_choice(dialog.textbox, "Select type:", type_menu, 2, 5, y, false);
+    if (type_choice == -1)
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+    new_sub.expense = (type_choice == 0);
+
+    // Get period type
+    const char *period_menu[] = {
+        "Weekly",
+        "Monthly",
+        "Yearly",
+        "Custom Days"
+    };
+    wclear(dialog.textbox);
+    mvwprintw(dialog.textbox, 1, 0, "Select period:");
+    int period_choice = get_scrollable_menu_choice(dialog.textbox, "", period_menu, 4, 5, 1, false);
+    if (period_choice == -1)
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+    new_sub.period_type = period_choice;
+
+    // Get period day based on type
+    wclear(dialog.textbox);
+    switch (period_choice)
+    {
+        case PERIOD_WEEKLY:
+        {
+            const char *day_menu[] = {
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+            };
+            mvwprintw(dialog.textbox, 1, 0, "Select day of week:");
+            int day_choice = get_scrollable_menu_choice(dialog.textbox, "", day_menu, 7, 5, 1, false);
+            if (day_choice == -1)
+            {
+                delete_bounded(dialog);
+                return; // User canceled
+            }
+            new_sub.period_day = day_choice;
+            break;
+        }
+        case PERIOD_MONTHLY:
+        {
+            int day;
+            wclear(dialog.textbox);
+            if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
+            {
+                delete_bounded(dialog);
+                return; // User canceled
+            }
+            new_sub.period_day = (day < 1) ? 1 : (day > 31) ? 31 : day;
+            break;
+        }
+        case PERIOD_YEARLY:
+        {
+            int month;
+            wclear(dialog.textbox);
+            if (!get_input(dialog.textbox, &month, "Enter month (1-12): ", MAX_BUFFER, INPUT_INT))
+            {
+                delete_bounded(dialog);
+                return; // User canceled
+            }
+            new_sub.period_day = (month < 1) ? 1 : (month > 12) ? 12 : month;
+
+            int day;
+            wclear(dialog.textbox);
+            if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
+            {
+                delete_bounded(dialog);
+                return; // User canceled
+            }
+            new_sub.period_month_day = (day < 1) ? 1 : (day > 31) ? 31 : day;
+            break;
+        }
+        case PERIOD_CUSTOM_DAYS:
+        {
+            int days;
+            wclear(dialog.textbox);
+            if (!get_input(dialog.textbox, &days, "Enter number of days between recurrences (1-365): ", MAX_BUFFER, INPUT_INT))
+            {
+                delete_bounded(dialog);
+                return; // User canceled
+            }
+            new_sub.period_day = (days < 1) ? 1 : (days > 365) ? 365 : days;
+            break;
+        }
+    }
+
+    // Get start date
+    char date_buffer[11];
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter start date (DD-MM-YYYY): "))
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+    strncpy(new_sub.start_date, date_buffer, 10);
+    new_sub.start_date[10] = '\0';
+
+    // Get end date (optional)
+    wclear(dialog.textbox);
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter end date (DD-MM-YYYY), or use same as start date for indefinite:"))
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+    else
+    {
+        if (strcmp(date_buffer, new_sub.start_date) == 0)
+        {
+            strcpy(new_sub.end_date, "9999-12-31"); // Far future date
+        }
+        else
+        {
+            strcpy(new_sub.end_date, date_buffer);
+        }
+    }
+    new_sub.end_date[10] = '\0';
+
+    // Get category if it's an expense
+    if (new_sub.expense && category_count > 0)
+    {
+        char **category_menu = malloc(category_count * sizeof(char *));
+        if (category_menu == NULL)
+        {
+            draw_error(dialog, "Memory allocation error.");
+            delete_bounded(dialog);
+            return;
+        }
+
+        for (int i = 0; i < category_count; i++)
+        {
+            category_menu[i] = malloc(MAX_NAME_LEN);
+            if (category_menu[i] == NULL)
+            {
+                for (int j = 0; j < i; j++)
+                {
+                    free(category_menu[j]);
+                }
+                free(category_menu);
+                draw_error(dialog, "Memory allocation error.");
+                delete_bounded(dialog);
+                return;
+            }
+            strcpy(category_menu[i], categories[i].name);
+        }
+
+        wclear(dialog.textbox);
+        int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select category:", (const char **)category_menu, category_count, 5, 1, true);
+
+        // Free allocated memory
+        for (int i = 0; i < category_count; i++)
+        {
+            free(category_menu[i]);
+        }
+        free(category_menu);
+
+        if (cat_choice == -1)
+        {
+            delete_bounded(dialog);
+            return; // User canceled
+        }
+
+        strcpy(new_sub.cat_name, categories[cat_choice].name);
+    }
+    else
+    {
+        strcpy(new_sub.cat_name, "Uncategorized");
+    }
+
+    // Set initial last_updated to today
+    time_t now = time(NULL);
+    struct tm *today = localtime(&now);
+    new_sub.last_updated = today->tm_yday + 1; // tm_yday is 0-365, we want 1-366
+
+    // Add the subscription
+    subscriptions[subscription_count++] = new_sub;
+    save_data_to_file();
+
+    delete_bounded(dialog);
+}
+
+void remove_subscription_dialog()
+{
+    WINDOW *win = stdscr;
+    int max_y, max_x;
+    getmaxyx(win, max_y, max_x);
+
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
+    int start_y = (max_y - dialog_height) / 2;
+    int start_x = (max_x - dialog_width) / 2;
+
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Remove Subscription", false, ALIGN_CENTER);
+    wnoutrefresh(dialog.boundary);
+
+    if (subscription_count == 0)
+    {
+        draw_error(dialog, "No subscriptions to remove.");
+        return;
+    }
+
+    // Create dynamic menu for subscriptions
+    char **sub_menu = malloc(subscription_count * sizeof(char *));
+    if (sub_menu == NULL)
+    {
+        draw_error(dialog, "Memory allocation error.");
+        return;
+    }
+
+    for (int i = 0; i < subscription_count; i++)
+    {
+        sub_menu[i] = malloc(MAX_NAME_LEN + 50); // Extra space for details
+        if (sub_menu[i] == NULL)
+        {
+            // Free previously allocated memory
+            for (int j = 0; j < i; j++)
+            {
+                free(sub_menu[j]);
+            }
+            free(sub_menu);
+            draw_error(dialog, "Memory allocation error.");
+            return;
+        }
+
+        const char *period_str;
+        switch (subscriptions[i].period_type)
+        {
+            case PERIOD_WEEKLY:
+                period_str = "Weekly";
+                break;
+            case PERIOD_MONTHLY:
+                period_str = "Monthly";
+                break;
+            case PERIOD_YEARLY:
+                period_str = "Yearly";
+                break;
+            default:
+                period_str = "Unknown";
+        }
+
+        sprintf(sub_menu[i], "%s (%s, $%.2f)", 
+                subscriptions[i].name,
+                period_str,
+                subscriptions[i].amount);
+    }
+
+    int sub_choice = get_scrollable_menu_choice(dialog.textbox, "Select a subscription to remove:", (const char **)sub_menu, subscription_count, 6, 1, true);
+
+    // Free allocated memory
+    for (int i = 0; i < subscription_count; i++)
+    {
+        free(sub_menu[i]);
+    }
+    free(sub_menu);
+
+    if (sub_choice == -1)
+    {
+        delete_bounded(dialog);
+        return; // User canceled
+    }
+
+    const char *confirm_message[2];
+    char message_buffer[100];
+    sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", subscriptions[sub_choice].name);
+    confirm_message[0] = message_buffer;
+    confirm_message[1] = "This will not remove any transactions already created.";
+    int confirm = get_confirmation(dialog.textbox, confirm_message, 2);
+
+    if (confirm == 0)
+    { // Yes, remove it
+        // Remove the subscription by shifting all subscriptions after it one position back
+        for (int i = sub_choice; i < subscription_count - 1; i++)
+        {
+            subscriptions[i] = subscriptions[i + 1];
+        }
+        subscription_count--;
+        save_data_to_file();
+    }
+
     delete_bounded(dialog);
 }

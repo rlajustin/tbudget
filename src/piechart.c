@@ -6,25 +6,25 @@
 
 // Array of possible slice colors - now foreground and background are the same for solid color blocks
 static const short pie_colors[][2] = {
-    {COLOR_WHITE, COLOR_BLUE},
-    {COLOR_WHITE, COLOR_GREEN},
-    {COLOR_WHITE, COLOR_MAGENTA},
-    {COLOR_WHITE, COLOR_CYAN},
-    {COLOR_WHITE, COLOR_RED},
-    {COLOR_WHITE, COLOR_YELLOW},
-    {COLOR_WHITE, COLOR_WHITE},
-    {COLOR_WHITE, COLOR_BLACK},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_YELLOW},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_GREEN},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_MAGENTA},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_CYAN},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_RED},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_BLUE},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_BLACK},
+    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_WHITE},
 };
 
 static const short pie_colors_darker[][2] = {
-    {COLOR_BLACK, COLOR_BLUE},
-    {COLOR_BLACK, COLOR_GREEN},
-    {COLOR_BLACK, COLOR_MAGENTA},
-    {COLOR_BLACK, COLOR_CYAN},
-    {COLOR_BLACK, COLOR_RED},
-    {COLOR_BLACK, COLOR_YELLOW},
-    {COLOR_BLACK, COLOR_WHITE},
-    {COLOR_BLACK, COLOR_BLACK},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_YELLOW},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_GREEN},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_MAGENTA},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_CYAN},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_RED},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_BLUE},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_BLACK},
+    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_WHITE},
 };
 
 // These are now defined in piechart.h
@@ -190,7 +190,7 @@ void display_budget_pie_chart(WINDOW *win, double width, double height)
             else
             {
                 slices[slice_count].percentage = (categories[i].budget / total_budget) * 100.0;
-                slices[slice_count].color_pair = PIE_COLOR_START + i;
+                slices[slice_count].color_pair = PIE_DARKER_COLOR_START + i;
                 strncpy(slices[slice_count].label, categories[i].name, MAX_NAME_LEN - 1);
                 slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
                 slice_count++;
@@ -198,7 +198,7 @@ void display_budget_pie_chart(WINDOW *win, double width, double height)
         }
     }
     slices[slice_count].percentage = 100.0 - used_budget;
-    slices[slice_count].color_pair = PIE_COLOR_START + NUM_PIE_COLORS - 1;
+    slices[slice_count].color_pair = PIE_DARKER_COLOR_START + NUM_PIE_COLORS - 1;
     strncpy(slices[slice_count].label, "Savings", MAX_NAME_LEN - 1);
     slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
     slice_count++;

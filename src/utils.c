@@ -449,6 +449,12 @@ void save_data_to_file()
     // Write all transactions at once
     fwrite(transactions, sizeof(Transaction), transaction_count, file);
 
+    // Write subscription count
+    fwrite(&subscription_count, sizeof(int), 1, file);
+
+    // Write all subscriptions at once
+    fwrite(subscriptions, sizeof(Subscription), subscription_count, file);
+
     fclose(file);
 }
 
@@ -526,6 +532,29 @@ int load_data_from_file()
     {
         fclose(file);
         return -1;
+    }
+
+    // Read subscription count
+    if (fread(&subscription_count, sizeof(int), 1, file) != 1)
+    {
+        // This might be an old file without subscriptions
+        subscription_count = 0;
+    }
+    else
+    {
+        // Validate subscription count to prevent buffer overflow
+        if (subscription_count > MAX_SUBSCRIPTIONS || subscription_count < 0)
+        {
+            fclose(file);
+            return -1;
+        }
+
+        // Read all subscriptions at once
+        if (fread(subscriptions, sizeof(Subscription), subscription_count, file) != (size_t)subscription_count)
+        {
+            fclose(file);
+            return -1;
+        }
     }
 
     fclose(file);

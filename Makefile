@@ -2,14 +2,15 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g -I./include
 LDFLAGS = -lncurses -lm
 
-TARGET = tbudget
 SRC_DIR = src
-SRC = $(SRC_DIR)/main.c $(SRC_DIR)/actions.c $(SRC_DIR)/utils.c $(SRC_DIR)/ui.c $(SRC_DIR)/globals.c $(SRC_DIR)/piechart.c $(SRC_DIR)/flexlayout.c
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/*/*.c)
+
+TARGET = tbudget
 PREFIX = /usr/local
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 install: $(TARGET)

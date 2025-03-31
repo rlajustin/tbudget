@@ -112,6 +112,7 @@ int main(int argc, char *argv[])
 
     sort_categories_by_budget();
     compute_monthly();
+    update_subscriptions(); // Update subscriptions and create transactions
 
     // Initialize data directories
     setup_ncurses();
@@ -128,9 +129,9 @@ int main(int argc, char *argv[])
         run_dashboard_mode();
     }
 
+    save_data_to_file();
     curs_set(1);
     cleanup_ncurses();
-    save_data_to_file();
 
     return 0;
 }
@@ -216,6 +217,8 @@ void run_dashboard_mode()
     const char *action_menu[] = {
         "Add Expense",
         "Remove Transaction",
+        "Add Subscription",
+        "Remove Subscription",
         "Export to CSV",
         "Exit Dashboard"};
     int action_menu_size = sizeof(action_menu) / sizeof(action_menu[0]);
@@ -224,7 +227,7 @@ void run_dashboard_mode()
     // Turn off cursor
     curs_set(0);
     clear();
-    draw_title(win, "tbudget Dashboard - Budget Management Tool");
+    draw_title(win, "tbudget Dashboard");
 
     bool needs_redraw = true;
     bool is_leaving = false;
@@ -235,7 +238,13 @@ void run_dashboard_mode()
     FlexContainer *top_row = NULL;
     FlexContainer *bottom_row = NULL;
 
-    int active_window = 0; // Start with actions menu (window 0)
+    int active_window = 0;             // Start with actions menu (window 0)
+    int selected_transaction = 0;      // Index of the selected transaction
+    int first_display_transaction = 0; // Index of the first transaction to display
+
+    // Vim-style navigation count buffer
+    char count_buffer[16] = {0}; // Buffer to store the count prefix
+    int count_buffer_pos = 0;    // Current position in the count buffer
 
     // Main dashboard loop
     while (1)
@@ -244,12 +253,6 @@ void run_dashboard_mode()
         {
             // Recalculate sizes in case of window resize
             getmaxyx(win, max_y, max_x);
-
-            // Clear the main window/background completely
-            wclear(win);
-
-            // Redraw the title
-            draw_title(win, "tbudget Dashboard - Budget Management Tool");
 
             // Clean up previous layout if any
             if (main_layout != NULL)
@@ -309,7 +312,7 @@ void run_dashboard_mode()
             apply_flex_layout(main_layout, 0, 2, max_x, max_y - 3);
 
             // Key help line
-            char *help_text = is_leaving ? "Exiting tbudget, press Q again to confirm" : "TAB/Shift+TAB or ARROW KEYS to switch windows | ENTER to select | Q to quit";
+            char *help_text = is_leaving ? "Exiting tbudget, press Q again to confirm" : "TAB/Shift+TAB or ARROW KEYS to navigate | ENTER to select | Q to quit";
 
             // Display help line at the bottom
             mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
@@ -341,7 +344,7 @@ void run_dashboard_mode()
             // Display transaction history
             if (transaction_count > 0)
             {
-                display_transactions(trans_win.textbox, 1);
+                display_transactions(trans_win.textbox, selected_transaction, &first_display_transaction, 1, active_window == TRANSACTION_HISTORY_WINDOW);
             }
             else
             {
@@ -349,14 +352,81 @@ void run_dashboard_mode()
                 mvwprintw(trans_win.textbox, 2, 2, "Select 'Add Transaction' from the Actions menu.");
             }
 
+            // Display subscriptions
+            if (subscription_count > 0)
+            {
+                char today_date[11];
+                time_t now = time(NULL);
+                struct tm *today = localtime(&now);
+                sprintf(today_date, "%04d-%02d-%02d", 
+                        today->tm_year + 1900,
+                        today->tm_mon + 1,
+                        today->tm_mday);
+
+                int row = 1;
+                mvwprintw(subscription_win.textbox, row++, 2, "Active Subscriptions:");
+                row++;
+
+                for (int i = 0; i < subscription_count; i++)
+                {
+                    // Skip if subscription hasn't started yet
+                    if (is_date_after(subscriptions[i].start_date, today_date))
+                        continue;
+                        
+                    // Skip if subscription has ended
+                    if (is_date_before(subscriptions[i].end_date, today_date))
+                        continue;
+
+                    char details[100] = {0};
+                    
+                    switch (subscriptions[i].period_type)
+                    {
+                        case PERIOD_WEEKLY:
+                        {
+                            const char *days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+                            sprintf(details, "Weekly on %s", days[subscriptions[i].period_day]);
+                            break;
+                        }
+                        case PERIOD_MONTHLY:
+                            sprintf(details, "Monthly on day %d", subscriptions[i].period_day);
+                            break;
+                        case PERIOD_YEARLY:
+                            sprintf(details, "Yearly on %d/%d", subscriptions[i].period_day, subscriptions[i].period_month_day);
+                            break;
+                        case PERIOD_CUSTOM_DAYS:
+                            sprintf(details, "Every %d days", subscriptions[i].period_day);
+                            break;
+                    }
+
+                    // Print subscription details
+                    if (subscriptions[i].expense)
+                        wattron(subscription_win.textbox, COLOR_PAIR(3)); // Red for expense
+                    else
+                        wattron(subscription_win.textbox, COLOR_PAIR(2)); // Green for income
+
+                    mvwprintw(subscription_win.textbox, row++, 2, "%s ($%.2f)", 
+                             subscriptions[i].name, subscriptions[i].amount);
+                    wattroff(subscription_win.textbox, COLOR_PAIR(2) | COLOR_PAIR(3));
+                    
+                    mvwprintw(subscription_win.textbox, row++, 4, "%s", details);
+                    mvwprintw(subscription_win.textbox, row++, 4, "Category: %s", subscriptions[i].cat_name);
+                    row++; // Add a blank line between subscriptions
+                }
+            }
+            else
+            {
+                mvwprintw(subscription_win.textbox, 1, 2, "No active subscriptions.");
+                mvwprintw(subscription_win.textbox, 2, 2, "Select 'Add Subscription' from the Actions menu.");
+            }
+
             // Display action menu
             for (int i = 0; i < action_menu_size; i++)
             {
                 if (active_window == ACTIONS_MENU_WINDOW && i == highlighted_action)
                 {
-                    wattron(action_win.textbox, COLOR_PAIR(4));
+                    wattron(action_win.textbox, COLOR_PAIR(5));
                     mvwprintw(action_win.textbox, 2 + i, 2, "%d. %s", i + 1, action_menu[i]);
-                    wattroff(action_win.textbox, COLOR_PAIR(4));
+                    wattroff(action_win.textbox, COLOR_PAIR(5));
                 }
                 else
                 {
@@ -376,6 +446,8 @@ void run_dashboard_mode()
 
         if (ch == 'q' || ch == 'Q')
         {
+            memset(count_buffer, 0, sizeof(count_buffer));
+            count_buffer_pos = 0;
             if (is_leaving)
             {
                 // Clean up layout
@@ -399,16 +471,29 @@ void run_dashboard_mode()
             {
                 is_leaving = false;
                 needs_redraw = true;
-                continue;
             }
         }
 
-        // Handle toggle between pie chart and table view
-        if (ch == 'p' || ch == 'P')
+        // Check if character is a digit (0-9)
+        if (ch >= '0' && ch <= '9')
         {
-            show_pie_chart = !show_pie_chart;
-            needs_redraw = true;
+            // Add digit to the count buffer
+            if (count_buffer_pos < (int)sizeof(count_buffer) - 1)
+            { // Leave space for null terminator
+                count_buffer[count_buffer_pos++] = ch;
+                count_buffer[count_buffer_pos] = '\0';
+            }
+            needs_redraw = true; // Redraw to update the help text
             continue;
+        }
+
+        // Get count (default to 1 if buffer is empty)
+        int count = 1;
+        if (count_buffer_pos > 0)
+        {
+            count = atoi(count_buffer);
+            if (count < 1)
+                count = 1; // Ensure at least 1
         }
 
         // Handle window selection
@@ -419,30 +504,63 @@ void run_dashboard_mode()
             active_window = (active_window + 1) % NUM_SELECTABLE_WINDOWS;
             needs_redraw = true;
             break;
-
-        case KEY_BTAB: // Shift+Tab
-        case KEY_LEFT:
-            active_window = (active_window + NUM_SELECTABLE_WINDOWS - 1) % NUM_SELECTABLE_WINDOWS;
+        case 'l':
+            active_window = (active_window + count) % NUM_SELECTABLE_WINDOWS;
             needs_redraw = true;
             break;
 
+        case KEY_BTAB: // Shift+Tab
+        case KEY_LEFT:
+            active_window = (active_window - 1 + NUM_SELECTABLE_WINDOWS) % NUM_SELECTABLE_WINDOWS;
+            needs_redraw = true;
+            break;
+        case 'h':
+            active_window = (active_window - (count % NUM_SELECTABLE_WINDOWS) + NUM_SELECTABLE_WINDOWS) % NUM_SELECTABLE_WINDOWS;
+            needs_redraw = true;
+            break;
         case 'j':
         case KEY_DOWN:
+        {
+            int amount = ch == 'j' ? count : 1;
             if (active_window == ACTIONS_MENU_WINDOW && highlighted_action < action_menu_size - 1)
             {
-                highlighted_action++;
-                needs_redraw = true;
+                highlighted_action += amount;
+                highlighted_action = MIN(highlighted_action, action_menu_size - 1);
             }
+            else if (active_window == TRANSACTION_HISTORY_WINDOW && selected_transaction < transaction_count - 1)
+            {
+                selected_transaction += amount;
+                selected_transaction = MIN(selected_transaction, transaction_count - 1);
+            }
+            else
+            {
+                active_window = (active_window + amount) % NUM_SELECTABLE_WINDOWS;
+            }
+            needs_redraw = true;
             break;
+        }
 
         case 'k':
         case KEY_UP:
+        {
+            int amount = ch == 'k' ? count : 1;
             if (active_window == ACTIONS_MENU_WINDOW && highlighted_action > 0)
             {
-                highlighted_action--;
-                needs_redraw = true;
+                highlighted_action -= amount;
+                highlighted_action = MAX(highlighted_action, 0);
             }
+            else if (active_window == TRANSACTION_HISTORY_WINDOW && selected_transaction > 0)
+            {
+                selected_transaction -= amount;
+                selected_transaction = MAX(selected_transaction, 0);
+            }
+            else
+            {
+                active_window = (active_window - (amount % NUM_SELECTABLE_WINDOWS) + NUM_SELECTABLE_WINDOWS) % NUM_SELECTABLE_WINDOWS;
+            }
+            needs_redraw = true;
             break;
+        }
 
         case '\n': // Enter key
             switch (active_window)
@@ -463,7 +581,20 @@ void run_dashboard_mode()
                     needs_redraw = true;
                     break;
 
-                case 2: // Export to CSV
+                case 2: // Add Subscription
+                    add_subscription_dialog();
+                    update_subscriptions();
+                    compute_monthly();
+                    needs_redraw = true;
+                    break;
+
+                case 3: // Remove Subscription
+                    remove_subscription_dialog();
+                    compute_monthly();
+                    needs_redraw = true;
+                    break;
+
+                case 4: // Export to CSV
                 {
                     const char *export_msg[] = {"This may take a while..."};
                     BoundedWindow alert = draw_alert("Export to CSV", export_msg, 1);
@@ -482,7 +613,7 @@ void run_dashboard_mode()
                     break;
                 }
 
-                case 3: // Exit Dashboard
+                case 5: // Exit Dashboard
                     // Clean up layout
                     if (main_layout != NULL)
                     {
@@ -502,5 +633,7 @@ void run_dashboard_mode()
             needs_redraw = true;
             break;
         }
+        memset(count_buffer, 0, sizeof(count_buffer));
+        count_buffer_pos = 0;
     }
 }

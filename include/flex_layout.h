@@ -1,5 +1,5 @@
-#ifndef FLEXLAYOUT_H
-#define FLEXLAYOUT_H
+#ifndef FLEX_LAYOUT_H
+#define FLEX_LAYOUT_H
 
 #include "ui.h"
 #include <stdbool.h>
