@@ -210,19 +210,14 @@ void run_dashboard_mode()
         "Budget Breakdown",
         "Transaction History",
         "Subscriptions",
-        "TODO"
-    };
+        "TODO"};
 
     // Prepare action menu
     const char *action_menu[] = {
-        "Add Category",
-        "Remove Category",
         "Add Expense",
         "Remove Transaction",
-        "Set Total Budget",
         "Export to CSV",
-        "Exit Dashboard"
-    };
+        "Exit Dashboard"};
     int action_menu_size = sizeof(action_menu) / sizeof(action_menu[0]);
     int highlighted_action = 0;
 
@@ -239,7 +234,7 @@ void run_dashboard_mode()
     FlexContainer *main_layout = NULL;
     FlexContainer *top_row = NULL;
     FlexContainer *bottom_row = NULL;
-    
+
     int active_window = 0; // Start with actions menu (window 0)
 
     // Main dashboard loop
@@ -249,67 +244,72 @@ void run_dashboard_mode()
         {
             // Recalculate sizes in case of window resize
             getmaxyx(win, max_y, max_x);
-            
+
+            // Clear the main window/background completely
+            wclear(win);
+
+            // Redraw the title
+            draw_title(win, "tbudget Dashboard - Budget Management Tool");
+
             // Clean up previous layout if any
-            if (main_layout != NULL) {
+            if (main_layout != NULL)
+            {
                 free_flex_layout(main_layout);
             }
-            
+
             // Delete any existing windows
             delete_bounded_array(all_windows, NUM_WINDOWS);
-            
+
             // Create new layout with current dimensions
             // Main layout - vertical column
             main_layout = create_flex_container(
-                FLEX_COLUMN,          // Direction: vertically stacked
-                FLEX_START,           // Justify: items at the start
-                FLEX_ALIGN_STRETCH,   // Align: stretch across container width
-                1,                    // Gap between items
-                0,                    // No padding
-                2                     // Two items (top and bottom rows)
+                FLEX_COLUMN,        // Direction: vertically stacked
+                FLEX_START,         // Justify: items at the start
+                FLEX_ALIGN_STRETCH, // Align: stretch across container width
+                1,                  // Gap between items
+                0,                  // No padding
+                2                   // Two items (top and bottom rows)
             );
-            
+
             // Top row - horizontal row for action menu, budget summary, and breakdown
             top_row = create_flex_container(
-                FLEX_ROW,             // Direction: horizontally arranged
-                FLEX_START,           // Justify: items at the start
-                FLEX_ALIGN_STRETCH,   // Align: stretch height
-                1,                    // Gap between items
-                0,                    // No padding
-                3                     // Three items
+                FLEX_ROW,           // Direction: horizontally arranged
+                FLEX_START,         // Justify: items at the start
+                FLEX_ALIGN_STRETCH, // Align: stretch height
+                1,                  // Gap between items
+                0,                  // No padding
+                3                   // Three items
             );
-            
+
             // Bottom row - horizontal row for transactions, subscriptions, and TODOs
             bottom_row = create_flex_container(
-                FLEX_ROW,             // Direction: horizontally arranged
-                FLEX_START,           // Justify: items at the start
-                FLEX_ALIGN_STRETCH,   // Align: stretch height
-                1,                    // Gap between items
-                0,                    // No padding
-                3                     // Three items
+                FLEX_ROW,           // Direction: horizontally arranged
+                FLEX_START,         // Justify: items at the start
+                FLEX_ALIGN_STRETCH, // Align: stretch height
+                1,                  // Gap between items
+                0,                  // No padding
+                3                   // Three items
             );
-            
+
             // Add rows to main layout
             flex_container_add_item(main_layout, flex_container(1, 0, 0, 0, top_row));
             flex_container_add_item(main_layout, flex_container(1, 0, 0, 0, bottom_row));
-            
+
             // Add items to top row
             flex_container_add_item(top_row, flex_window(1, 0, window_titles[0], active_window == 0, ALIGN_LEFT, &action_win));
             flex_container_add_item(top_row, flex_window(2, 0, window_titles[1], active_window == 1, ALIGN_LEFT, &budget_win));
             flex_container_add_item(top_row, flex_window(2, 0, window_titles[2], active_window == 2, ALIGN_LEFT, &breakdown_win));
-            
+
             // Add items to bottom row
             flex_container_add_item(bottom_row, flex_window(2, 0, window_titles[3], active_window == 3, ALIGN_LEFT, &trans_win));
             flex_container_add_item(bottom_row, flex_window(1, 0, window_titles[4], active_window == 4, ALIGN_LEFT, &subscription_win));
             flex_container_add_item(bottom_row, flex_window(1, 0, window_titles[5], active_window == 5, ALIGN_LEFT, &TODO_win));
-            
+
             // Apply the flex layout
             apply_flex_layout(main_layout, 0, 2, max_x, max_y - 3);
-            
+
             // Key help line
-            char *help_text = is_leaving ? 
-                "Exiting tbudget, press Q again to confirm" : 
-                "TAB/Shift+TAB or 1-6 to switch windows | P to toggle pie chart | ENTER to select | Q to quit";
+            char *help_text = is_leaving ? "Exiting tbudget, press Q again to confirm" : "TAB/Shift+TAB or ARROW KEYS to switch windows | ENTER to select | Q to quit";
 
             // Display help line at the bottom
             mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
@@ -327,7 +327,7 @@ void run_dashboard_mode()
                     int x, y;
                     getmaxyx(breakdown_win.textbox, y, x);
                     display_budget_pie_chart(breakdown_win.textbox, 0.8 * x, 0.65 * y);
-                    
+
                     // Create bar chart as a child of the breakdown window
                     create_bar_chart(&breakdown_win);
                 }
@@ -352,7 +352,7 @@ void run_dashboard_mode()
             // Display action menu
             for (int i = 0; i < action_menu_size; i++)
             {
-                if (active_window == 0 && i == highlighted_action)
+                if (active_window == ACTIONS_MENU_WINDOW && i == highlighted_action)
                 {
                     wattron(action_win.textbox, COLOR_PAIR(4));
                     mvwprintw(action_win.textbox, 2 + i, 2, "%d. %s", i + 1, action_menu[i]);
@@ -379,7 +379,8 @@ void run_dashboard_mode()
             if (is_leaving)
             {
                 // Clean up layout
-                if (main_layout != NULL) {
+                if (main_layout != NULL)
+                {
                     free_flex_layout(main_layout);
                 }
                 delete_bounded_array(all_windows, NUM_WINDOWS);
@@ -414,26 +415,20 @@ void run_dashboard_mode()
         switch (ch)
         {
         case '\t': // Tab key
+        case KEY_RIGHT:
             active_window = (active_window + 1) % NUM_SELECTABLE_WINDOWS;
             needs_redraw = true;
             break;
 
         case KEY_BTAB: // Shift+Tab
+        case KEY_LEFT:
             active_window = (active_window + NUM_SELECTABLE_WINDOWS - 1) % NUM_SELECTABLE_WINDOWS;
             needs_redraw = true;
             break;
 
-        // Number keys for direct window selection
-        case '1': case '2': case '3': case '4': case '5': case '6':
-            active_window = ch - '1';
-            if (active_window < NUM_SELECTABLE_WINDOWS) {
-                needs_redraw = true;
-            }
-            break;
-
         case 'j':
         case KEY_DOWN:
-            if (active_window == 0 && highlighted_action < action_menu_size - 1)
+            if (active_window == ACTIONS_MENU_WINDOW && highlighted_action < action_menu_size - 1)
             {
                 highlighted_action++;
                 needs_redraw = true;
@@ -442,7 +437,7 @@ void run_dashboard_mode()
 
         case 'k':
         case KEY_UP:
-            if (active_window == 0 && highlighted_action > 0)
+            if (active_window == ACTIONS_MENU_WINDOW && highlighted_action > 0)
             {
                 highlighted_action--;
                 needs_redraw = true;
@@ -450,41 +445,25 @@ void run_dashboard_mode()
             break;
 
         case '\n': // Enter key
-            if (active_window == 0)
+            switch (active_window)
             {
+            case ACTIONS_MENU_WINDOW:
                 // Handle action menu selection
                 switch (highlighted_action)
                 {
-                case 0:
-                    add_category_dialog();
-                    sort_categories_by_budget();
-                    needs_redraw = true;
-                    break;
-
-                case 1: // Remove Category
-                    remove_category_dialog();
-                    compute_monthly();
-                    needs_redraw = true;
-                    break;
-
-                case 2: // Add Expense
+                case 0: // Add Expense
                     add_expense_dialog();
                     compute_monthly();
                     needs_redraw = true;
                     break;
 
-                case 3: // Remove Transaction
+                case 1: // Remove Transaction
                     remove_transaction_dialog();
                     compute_monthly();
                     needs_redraw = true;
                     break;
 
-                case 4: // Set Total Budget
-                    set_budget_dialog();
-                    needs_redraw = true;
-                    break;
-
-                case 5: // Export to CSV
+                case 2: // Export to CSV
                 {
                     const char *export_msg[] = {"This may take a while..."};
                     BoundedWindow alert = draw_alert("Export to CSV", export_msg, 1);
@@ -503,17 +482,22 @@ void run_dashboard_mode()
                     break;
                 }
 
-                case 6: // Exit Dashboard
+                case 3: // Exit Dashboard
                     // Clean up layout
-                    if (main_layout != NULL) {
+                    if (main_layout != NULL)
+                    {
                         free_flex_layout(main_layout);
                     }
                     delete_bounded_array(all_windows, NUM_WINDOWS);
                     return;
                 }
+                break;
+            case BUDGET_SUMMARY_WINDOW:
+                budget_summary_dialog();
+                needs_redraw = true;
+                break;
             }
             break;
-
         case KEY_RESIZE:
             needs_redraw = true;
             break;

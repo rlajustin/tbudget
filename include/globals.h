@@ -8,6 +8,17 @@
 #define MAX_NAME_LEN 50
 #define MAX_TRANSACTIONS 10000000 // you are probably not extremely wealthy so this should be enough
 #define MAX_BUFFER 1024
+#define DEFAULT_DIALOG_HEIGHT 10
+#define DEFAULT_DIALOG_WIDTH 70
+
+// Window definitions
+#define ACTIONS_MENU_WINDOW 0
+#define BUDGET_SUMMARY_WINDOW 1
+#define BUDGET_BREAKDOWN_WINDOW 2
+#define TRANSACTION_HISTORY_WINDOW 3
+#define SUBSCRIPTIONS_WINDOW 4
+#define TODO_WINDOW 5
+
 
 // Key definitions
 #define KEY_BACKSPACE_ALT 127

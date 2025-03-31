@@ -9,8 +9,8 @@ void add_category_dialog()
     getmaxyx(win, max_y, max_x);
 
     // Create a dialog box centered on screen
-    int dialog_height = 9;
-    int dialog_width = 60;
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
@@ -65,8 +65,8 @@ void remove_category_dialog()
     getmaxyx(win, max_y, max_x);
 
     // Calculate dialog size based on number of categories
-    int dialog_height = 10;
-    int dialog_width = 60;
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
@@ -163,8 +163,8 @@ void set_budget_dialog()
     getmaxyx(win, max_y, max_x);
 
     // Create a dialog box centered on screen
-    int dialog_height = 9;
-    int dialog_width = 50;
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
@@ -211,8 +211,8 @@ void add_expense_dialog()
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
-    int dialog_height = 11;
-    int dialog_width = 60;
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
@@ -370,13 +370,11 @@ void remove_transaction_dialog()
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
-    // Calculate dialog size based on number of transactions
-    // Cap at a reasonable size for many transactions
-    int max_display = 10; // Maximum number of transactions to display at once
+    // Keep the variable height calculation for transactions
+    int max_display = 10;
     int display_count = transaction_count < max_display ? transaction_count : max_display;
-
     int dialog_height = display_count > 1 ? display_count + 8 : 10;
-    int dialog_width = 70;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
 
@@ -462,5 +460,78 @@ void remove_transaction_dialog()
         save_data_to_file(); // Save after removing transaction
     }
 
+    delete_bounded(dialog);
+}
+
+void budget_summary_dialog()
+{
+    WINDOW *win = stdscr;
+    int max_y, max_x;
+    getmaxyx(win, max_y, max_x);
+
+    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_width = DEFAULT_DIALOG_WIDTH;
+    int start_y = (max_y - dialog_height) / 2;
+    int start_x = (max_x - dialog_width) / 2;
+
+    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Budget Summary", false, ALIGN_CENTER);
+    wnoutrefresh(dialog.boundary);
+
+    const char *options_names[5] = {0};
+    int options_values[5] = {0};
+    int num_options = 0;
+
+    if (category_count < MAX_CATEGORIES)
+    {
+        options_names[num_options] = "Add Category";
+        options_values[num_options] = 0;
+        num_options++;
+    }
+    if (category_count > 0)
+    {
+        options_names[num_options] = "Remove Category";
+        options_values[num_options] = 1;
+        num_options++;
+    }
+    if (transaction_count > 0)
+    {
+        options_names[num_options] = "View Transactions";
+        options_values[num_options] = 2;
+        num_options++;
+    }
+    options_names[num_options] = "Set Total Budget";
+    options_values[num_options] = 3;
+    num_options++;
+    options_names[num_options] = "Exit";
+    options_values[num_options] = 4;
+    num_options++;
+
+    int option_choice = get_scrollable_menu_choice(dialog.textbox, "Select an option:", options_names, num_options, 5, 1);
+    if (option_choice == -1)
+    {
+        delete_bounded(dialog);
+        return;
+    }
+
+    switch (options_values[option_choice])
+    {
+    case 0:
+        add_category_dialog();
+        sort_categories_by_budget();
+        break;
+    case 1:
+        remove_category_dialog();
+        compute_monthly();
+        break;
+    case 2:
+        draw_error(dialog, "Not implemented yet");
+        break;
+    case 3:
+        set_budget_dialog();
+        break;
+    case 4:
+        break;
+    }
+    
     delete_bounded(dialog);
 }

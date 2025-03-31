@@ -176,6 +176,7 @@ BoundedWindow draw_alert_persistent(const char *title, const char *message[], in
 
 void draw_error(BoundedWindow win, const char *message)
 {
+  wclear(win.textbox);
   mvwprintw(win.textbox, 1, 0, "%s", message);
   mvwprintw(win.textbox, 2, 0, "Press any key to continue...");
   wnoutrefresh(win.textbox);
@@ -215,6 +216,8 @@ void delete_bounded(BoundedWindow win)
   {
     delwin(win.textbox);
   }
+  touchwin(stdscr);
+  wnoutrefresh(stdscr);
 }
 
 void delete_bounded_array(BoundedWindow *windows[], int count)

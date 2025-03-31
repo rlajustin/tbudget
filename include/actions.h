@@ -13,4 +13,7 @@ void set_budget_dialog();
 void add_expense_dialog();
 void remove_transaction_dialog();
 
+// Dashboard mode dialogs
+void budget_summary_dialog();
+
 #endif
