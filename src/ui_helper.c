@@ -1,5 +1,4 @@
 #include "ui_helper.h"
-#include <math.h>
 
 void setup_ncurses()
 {
@@ -13,6 +12,7 @@ void setup_ncurses()
   }
 
   initscr(); // Initialize ncurses
+  use_default_colors();
 
   // Set ESC delay programmatically (preferred method)
   set_escdelay(10); // Set to 10 milliseconds
@@ -291,7 +291,7 @@ int get_confirmation(WINDOW *win, const char *message[], int item_count)
     draw_menu(win, highlighted_item, confirm_menu, 2, item_count + 2);
     wrefresh(win);
 
-    int ch = wgetch(win);
+    int ch = getch();
 
     if (ch == 'y' || ch == 'Y')
     {
@@ -737,9 +737,9 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
   int cursor_positions[3] = {0, 3, 6}; // Positions for DD-MM-YYYY
   int y, x;
   getyx(win, y, x);
-
   mvwprintw(win, y, x, "%s", prompt);
-  x += strlen(prompt);
+  y++;
+  x = 0;
 
   // Enable keypad mode for this window to properly detect arrow keys
   keypad(win, TRUE);
@@ -749,48 +749,21 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
   int month = 1;
   int year = 2025;
 
-  // Pre-fill with today's date
-  time_t now = time(NULL);
-  struct tm *today = localtime(&now);
-  day = today->tm_mday;
-  month = today->tm_mon + 1; // tm_mon is 0-11
-  year = today->tm_year + 1900;
-
-  // If date_buffer contains a valid date, use it instead
-  if (strlen(date_buffer) >= 10)
+  // If we have a last transaction, use its date
+  if (current_month_transaction_count > 0)
   {
-    // Convert from YYYY-MM-DD to day, month, year
     char temp[5];
-    strncpy(temp, date_buffer, 4);
+    strncpy(temp, current_month_transactions[0].date, 4);
     temp[4] = '\0';
     year = atoi(temp);
 
-    strncpy(temp, date_buffer + 5, 2);
+    strncpy(temp, current_month_transactions[0].date + 5, 2);
     temp[2] = '\0';
     month = atoi(temp);
 
-    strncpy(temp, date_buffer + 8, 2);
+    strncpy(temp, current_month_transactions[0].date + 8, 2);
     temp[2] = '\0';
     day = atoi(temp);
-  }
-  else
-  {
-    // If we have a last transaction, use its date
-    if (transaction_count > 0)
-    {
-      char temp[5];
-      strncpy(temp, transactions[0].date, 4);
-      temp[4] = '\0';
-      year = atoi(temp);
-
-      strncpy(temp, transactions[0].date + 5, 2);
-      temp[2] = '\0';
-      month = atoi(temp);
-
-      strncpy(temp, transactions[0].date + 8, 2);
-      temp[2] = '\0';
-      day = atoi(temp);
-    }
   }
 
   // Save original cursor state to restore later
@@ -839,6 +812,7 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
 
         // Restore original cursor state
         curs_set(original_cursor_state);
+        format_date(win, y, x, day, month, year, 4, cursor_positions);
         return 1;
       }
     }
@@ -879,6 +853,12 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
         if (day > get_days_in_month(month, year))
         {
           day = 1;
+          month++;
+          if (month > 12)
+          {
+            month = 1;
+            year++;
+          }
         }
       }
       else if (highlighted_field == 1)
@@ -887,6 +867,7 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
         if (month > 12)
         {
           month = 1;
+          year++;
         }
         day = validate_day(day, month, year);
       }
@@ -910,6 +891,12 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
         if (day < 1)
         {
           day = get_days_in_month(month, year);
+          month--;
+          if (month < 1)
+          {
+            month = 12;
+            year--;
+          }
         }
       }
       else if (highlighted_field == 1)
@@ -918,6 +905,7 @@ int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
         if (month < 1)
         {
           month = 12;
+          year--;
         }
         day = validate_day(day, month, year);
       }

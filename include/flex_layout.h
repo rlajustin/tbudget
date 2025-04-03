@@ -2,6 +2,8 @@
 #define FLEX_LAYOUT_H
 
 #include "ui.h"
+#include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 
 // Flexbox-like layout system for ncurses windows

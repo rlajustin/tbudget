@@ -3,6 +3,7 @@
 
 #include <ncurses.h>
 #include <math.h>
+#include <string.h>
 #include "globals.h"
 #include "ui.h"
 

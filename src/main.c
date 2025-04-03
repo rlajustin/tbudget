@@ -1,11 +1,21 @@
 #include "main.h"
-#include <locale.h>
 
 // Main function
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
     int mode = MODE_MENU; // Default mode
+
+    initialize_data_directories();
+
+    time_t now = time(NULL);
+    struct tm *today = localtime(&now);
+    current_month = today->tm_mon + 1;
+    current_year = today->tm_year + 1900;
+
+    sort_categories_by_budget();
+    compute_monthly(current_month, current_year);
+    update_subscriptions(); // Update subscriptions and create transactions
 
     // Parse command line arguments
     if (argc > 1)
@@ -26,9 +36,7 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[1], "--export") == 0 || strcmp(argv[1], "-e") == 0)
         {
             // Export data to CSV and exit
-            setup_ncurses(); // Need to initialize for proper cleanup
             load_data_from_file();
-            cleanup_ncurses();
             export_data_to_csv(0); // Not silent, show message
             printf("Data exported to %s\n", export_file_path);
             return 0;
@@ -102,7 +110,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    initialize_data_directories();
     int load_result = load_data_from_file();
     if (load_result < 0)
     {
@@ -110,14 +117,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    sort_categories_by_budget();
-    compute_monthly();
-    update_subscriptions(); // Update subscriptions and create transactions
-
     // Initialize data directories
     setup_ncurses();
-
-    // Load data from file at startup
 
     // Run the appropriate mode
     if (mode == MODE_MENU)
@@ -168,8 +169,6 @@ void run_menu_mode()
     {
         clear();
         draw_title(stdscr, "TBudget - Budget Management Tool");
-        char *month = get_month_name();
-        mvprintw(5, 2, "%s Budget: $%.2f", month, total_budget);
 
         int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
 
@@ -210,16 +209,18 @@ void run_dashboard_mode()
         "Budget Summary",
         "Budget Breakdown",
         "Transaction History",
-        "Subscriptions",
+        "Repeating",
         "TODO"};
 
     // Prepare action menu
     const char *action_menu[] = {
         "Add Expense",
         "Remove Transaction",
-        "Add Subscription",
-        "Remove Subscription",
+        "Add Repeating",
+        "Remove Repeating",
         "Export to CSV",
+        "Previous Month",
+        "Next Month",
         "Exit Dashboard"};
     int action_menu_size = sizeof(action_menu) / sizeof(action_menu[0]);
     int highlighted_action = 0;
@@ -238,9 +239,13 @@ void run_dashboard_mode()
     FlexContainer *top_row = NULL;
     FlexContainer *bottom_row = NULL;
 
-    int active_window = 0;             // Start with actions menu (window 0)
+    int active_window = 0; // Start with actions menu (window 0)
+
     int selected_transaction = 0;      // Index of the selected transaction
     int first_display_transaction = 0; // Index of the first transaction to display
+
+    int selected_subscription = 0;      // Index of the selected subscription
+    int first_display_subscription = 0; // Index of the first subscription to display
 
     // Vim-style navigation count buffer
     char count_buffer[16] = {0}; // Buffer to store the count prefix
@@ -318,9 +323,9 @@ void run_dashboard_mode()
             mvwhline(win, max_y - 1, 0, ' ', max_x); // Clear the line first
             mvwprintw(win, max_y - 1, (max_x - strlen(help_text)) / 2, "%s", help_text);
 
-            char *month = get_month_name();
+            const char *month = month_names[current_month];
             // Display budget summary
-            mvwprintw(budget_win.textbox, 1, 2, "%s Budget: $%.2f", month, total_budget);
+            mvwprintw(budget_win.textbox, 1, 2, "%s %d Budget: $%.2f", month, current_year, total_budget);
             if (category_count > 0)
             {
                 // Show tabular view
@@ -342,76 +347,12 @@ void run_dashboard_mode()
             }
 
             // Display transaction history
-            if (transaction_count > 0)
-            {
-                display_transactions(trans_win.textbox, selected_transaction, &first_display_transaction, 1, active_window == TRANSACTION_HISTORY_WINDOW);
-            }
-            else
-            {
-                mvwprintw(trans_win.textbox, 1, 2, "No transactions recorded yet.");
-                mvwprintw(trans_win.textbox, 2, 2, "Select 'Add Transaction' from the Actions menu.");
-            }
+            display_transactions(trans_win.textbox, 1, selected_transaction, &first_display_transaction, active_window == TRANSACTION_HISTORY_WINDOW);
 
             // Display subscriptions
             if (subscription_count > 0)
             {
-                char today_date[11];
-                time_t now = time(NULL);
-                struct tm *today = localtime(&now);
-                sprintf(today_date, "%04d-%02d-%02d", 
-                        today->tm_year + 1900,
-                        today->tm_mon + 1,
-                        today->tm_mday);
-
-                int row = 1;
-                mvwprintw(subscription_win.textbox, row++, 2, "Active Subscriptions:");
-                row++;
-
-                for (int i = 0; i < subscription_count; i++)
-                {
-                    // Skip if subscription hasn't started yet
-                    if (is_date_after(subscriptions[i].start_date, today_date))
-                        continue;
-                        
-                    // Skip if subscription has ended
-                    if (is_date_before(subscriptions[i].end_date, today_date))
-                        continue;
-
-                    char details[100] = {0};
-                    
-                    switch (subscriptions[i].period_type)
-                    {
-                        case PERIOD_WEEKLY:
-                        {
-                            const char *days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-                            sprintf(details, "Weekly on %s", days[subscriptions[i].period_day]);
-                            break;
-                        }
-                        case PERIOD_MONTHLY:
-                            sprintf(details, "Monthly on day %d", subscriptions[i].period_day);
-                            break;
-                        case PERIOD_YEARLY:
-                            sprintf(details, "Yearly on %d/%d", subscriptions[i].period_day, subscriptions[i].period_month_day);
-                            break;
-                        case PERIOD_CUSTOM_DAYS:
-                            sprintf(details, "Every %d days", subscriptions[i].period_day);
-                            break;
-                    }
-
-                    // Print subscription details
-                    if (subscriptions[i].expense)
-                        wattron(subscription_win.textbox, COLOR_PAIR(3)); // Red for expense
-                    else
-                        wattron(subscription_win.textbox, COLOR_PAIR(2)); // Green for income
-
-                    mvwprintw(subscription_win.textbox, row++, 2, "%s ($%.2f)", 
-                             subscriptions[i].name, subscriptions[i].amount);
-                    wattroff(subscription_win.textbox, COLOR_PAIR(2) | COLOR_PAIR(3));
-                    
-                    mvwprintw(subscription_win.textbox, row++, 4, "%s", details);
-                    mvwprintw(subscription_win.textbox, row++, 4, "Category: %s", subscriptions[i].cat_name);
-                    row++; // Add a blank line between subscriptions
-                }
+                display_subscriptions(subscription_win.textbox, 1, selected_subscription, &first_display_subscription, active_window == SUBSCRIPTIONS_WINDOW);
             }
             else
             {
@@ -527,10 +468,15 @@ void run_dashboard_mode()
                 highlighted_action += amount;
                 highlighted_action = MIN(highlighted_action, action_menu_size - 1);
             }
-            else if (active_window == TRANSACTION_HISTORY_WINDOW && selected_transaction < transaction_count - 1)
+            else if (active_window == TRANSACTION_HISTORY_WINDOW && selected_transaction < current_month_transaction_count - 1)
             {
                 selected_transaction += amount;
-                selected_transaction = MIN(selected_transaction, transaction_count - 1);
+                selected_transaction = MIN(selected_transaction, current_month_transaction_count - 1);
+            }
+            else if (active_window == SUBSCRIPTIONS_WINDOW && selected_subscription < subscription_count - 1)
+            {
+                selected_subscription += amount;
+                selected_subscription = MIN(selected_subscription, subscription_count - 1);
             }
             else
             {
@@ -554,6 +500,11 @@ void run_dashboard_mode()
                 selected_transaction -= amount;
                 selected_transaction = MAX(selected_transaction, 0);
             }
+            else if (active_window == SUBSCRIPTIONS_WINDOW && selected_subscription > 0)
+            {
+                selected_subscription -= amount;
+                selected_subscription = MAX(selected_subscription, 0);
+            }
             else
             {
                 active_window = (active_window - (amount % NUM_SELECTABLE_WINDOWS) + NUM_SELECTABLE_WINDOWS) % NUM_SELECTABLE_WINDOWS;
@@ -571,26 +522,20 @@ void run_dashboard_mode()
                 {
                 case 0: // Add Expense
                     add_expense_dialog();
-                    compute_monthly();
+                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
                 case 1: // Remove Transaction
                     remove_transaction_dialog();
-                    compute_monthly();
+                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
                 case 2: // Add Subscription
                     add_subscription_dialog();
                     update_subscriptions();
-                    compute_monthly();
-                    needs_redraw = true;
-                    break;
-
-                case 3: // Remove Subscription
-                    remove_subscription_dialog();
-                    compute_monthly();
+                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
@@ -612,8 +557,27 @@ void run_dashboard_mode()
                     needs_redraw = true;
                     break;
                 }
-
-                case 5: // Exit Dashboard
+                case 5: // Previous Month
+                    current_month--;
+                    if (current_month > 12)
+                    {
+                        current_month = 1;
+                        current_year--;
+                    }
+                    compute_monthly(current_month, current_year);
+                    needs_redraw = true;
+                    break;
+                case 6: // Next Month
+                    current_month++;
+                    if (current_month > 12)
+                    {
+                        current_month = 1;
+                        current_year++;
+                    }
+                    compute_monthly(current_month, current_year);
+                    needs_redraw = true;
+                    break;
+                case 7: // Exit Dashboard
                     // Clean up layout
                     if (main_layout != NULL)
                     {
@@ -627,10 +591,26 @@ void run_dashboard_mode()
                 budget_summary_dialog();
                 needs_redraw = true;
                 break;
+            case SUBSCRIPTIONS_WINDOW:
+                remove_subscription_dialog(selected_subscription);
+                compute_monthly(current_month, current_year);
+                needs_redraw = true;
+                break;
             }
             break;
         case KEY_RESIZE:
             needs_redraw = true;
+            break;
+        case '+':
+            switch (active_window)
+            {
+            case SUBSCRIPTIONS_WINDOW:
+                add_subscription_dialog();
+                update_subscriptions();
+                compute_monthly(current_month, current_year);
+                needs_redraw = true;
+                break;
+            }
             break;
         }
         memset(count_buffer, 0, sizeof(count_buffer));

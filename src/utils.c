@@ -6,7 +6,7 @@ void write_export_content(FILE *export_file)
     fprintf(export_file, "TBudget Export\n\n");
 
     // Total budget
-    fprintf(export_file, "Total Budget:,%.2f\n\n", total_budget);
+    fprintf(export_file, "%s %d Budget:,%.2f\n\n", month_names[current_month], current_year, total_budget);
 
     // Categories
     fprintf(export_file, "CATEGORIES\n");
@@ -52,32 +52,32 @@ void write_export_content(FILE *export_file)
     fprintf(export_file, "TRANSACTIONS\n");
     fprintf(export_file, "ID,Description,Amount,Category,Date\n");
 
-    for (int i = 0; i < transaction_count; i++)
-    {
-        char category_name[MAX_NAME_LEN] = "Uncategorized";
-        strcpy(category_name, transactions[i].cat_name);
+    // for (int i = 0; i < transaction_count; i++)
+    // {
+    //     char category_name[MAX_NAME_LEN] = "Uncategorized";
+    //     strcpy(category_name, transactions[i].cat_name);
 
-        // Escape descriptions with quotes if they contain commas
-        if (strchr(transactions[i].desc, ',') != NULL)
-        {
-            fprintf(export_file, "%d,\"%s\",%.2f,\"%s\",%s\n",
-                    i + 1, transactions[i].desc, transactions[i].amt,
-                    category_name, transactions[i].date);
-        }
-        else if (strchr(category_name, ',') != NULL)
-        {
-            // If category name has a comma, we need to quote it
-            fprintf(export_file, "%d,%s,%.2f,\"%s\",%s\n",
-                    i + 1, transactions[i].desc, transactions[i].amt,
-                    category_name, transactions[i].date);
-        }
-        else
-        {
-            fprintf(export_file, "%d,%s,%.2f,%s,%s\n",
-                    i + 1, transactions[i].desc, transactions[i].amt,
-                    category_name, transactions[i].date);
-        }
-    }
+    //     // Escape descriptions with quotes if they contain commas
+    //     if (strchr(transactions[i].desc, ',') != NULL)
+    //     {
+    //         fprintf(export_file, "%d,\"%s\",%.2f,\"%s\",%s\n",
+    //                 i + 1, transactions[i].desc, transactions[i].amt,
+    //                 category_name, transactions[i].date);
+    //     }
+    //     else if (strchr(category_name, ',') != NULL)
+    //     {
+    //         // If category name has a comma, we need to quote it
+    //         fprintf(export_file, "%d,%s,%.2f,\"%s\",%s\n",
+    //                 i + 1, transactions[i].desc, transactions[i].amt,
+    //                 category_name, transactions[i].date);
+    //     }
+    //     else
+    //     {
+    //         fprintf(export_file, "%d,%s,%.2f,%s,%s\n",
+    //                 i + 1, transactions[i].desc, transactions[i].amt,
+    //                 category_name, transactions[i].date);
+    //     }
+    // }
 }
 
 void export_data_to_csv(int silent)
@@ -131,7 +131,7 @@ void export_data_to_csv(int silent)
     }
 }
 
-void import_data_from_csv(const char *filename)
+void import_data_from_csv(const char *filename) // broken
 {
     FILE *file = fopen(filename, "r");
     if (!file)
@@ -142,7 +142,6 @@ void import_data_from_csv(const char *filename)
 
     // Reset data
     category_count = 0;
-    transaction_count = 0;
     total_budget = 0.0;
 
     char line[MAX_BUFFER];
@@ -265,7 +264,7 @@ void import_data_from_csv(const char *filename)
                 category_count++;
             }
         }
-        else if (section == 3 && transaction_count < MAX_TRANSACTIONS)
+        else if (section == 3 && current_month_transaction_count < MAX_TRANSACTIONS)
         {
             // Transactions section
             // Skip ID and extract description, amount, category name, date
@@ -398,14 +397,14 @@ void import_data_from_csv(const char *filename)
             // Store in transaction array
             if (strlen(description) > 0)
             {
-                strncpy(transactions[transaction_count].desc, description, MAX_NAME_LEN - 1);
-                transactions[transaction_count].desc[MAX_NAME_LEN - 1] = '\0';
-                transactions[transaction_count].amt = amount;
-                strncpy(transactions[transaction_count].cat_name, category_name, MAX_NAME_LEN - 1);
-                transactions[transaction_count].cat_name[MAX_NAME_LEN - 1] = '\0';
-                strncpy(transactions[transaction_count].date, date, 10);
-                transactions[transaction_count].date[10] = '\0';
-                transaction_count++;
+                strncpy(current_month_transactions[current_month_transaction_count].desc, description, MAX_NAME_LEN - 1);
+                current_month_transactions[current_month_transaction_count].desc[MAX_NAME_LEN - 1] = '\0';
+                current_month_transactions[current_month_transaction_count].amt = amount;
+                strncpy(current_month_transactions[current_month_transaction_count].cat_name, category_name, MAX_NAME_LEN - 1);
+                current_month_transactions[current_month_transaction_count].cat_name[MAX_NAME_LEN - 1] = '\0';
+                strncpy(current_month_transactions[current_month_transaction_count].date, date, 10);
+                current_month_transactions[current_month_transaction_count].date[10] = '\0';
+                current_month_transaction_count++;
             }
         }
     }
@@ -431,28 +430,22 @@ void save_data_to_file()
     fwrite(header, sizeof(char), strlen(header), file);
 
     // Write version for future compatibility
-    const int version = 1;
+    const int version = 2;  // Increment version for new format
     fwrite(&version, sizeof(int), 1, file);
 
     // Write total budget
     fwrite(&total_budget, sizeof(double), 1, file);
 
-    // Write category count
+    // Write category count and categories
     fwrite(&category_count, sizeof(int), 1, file);
-
-    // Write all categories at once
     fwrite(categories, sizeof(Category), category_count, file);
 
-    // Write transaction count
-    fwrite(&transaction_count, sizeof(int), 1, file);
+    // Write month index information
+    fwrite(&month_index_manager.count, sizeof(int), 1, file);
+    fwrite(month_index_manager.indexes, sizeof(MonthIndex), month_index_manager.count, file);
 
-    // Write all transactions at once
-    fwrite(transactions, sizeof(Transaction), transaction_count, file);
-
-    // Write subscription count
+    // Write subscription count and subscriptions
     fwrite(&subscription_count, sizeof(int), 1, file);
-
-    // Write all subscriptions at once
     fwrite(subscriptions, sizeof(Subscription), subscription_count, file);
 
     fclose(file);
@@ -464,6 +457,7 @@ int load_data_from_file()
     if (!file)
     {
         // If file doesn't exist, that's okay - we'll start with empty data
+        init_month_index_manager();
         return 0;
     }
 
@@ -473,15 +467,16 @@ int load_data_from_file()
     {
         // Invalid file format
         fclose(file);
+        init_month_index_manager();
         return -2;
     }
 
     // Read version
     int version;
-    if (fread(&version, sizeof(int), 1, file) != 1 || version != 1)
+    if (fread(&version, sizeof(int), 1, file) != 1)
     {
-        // Unsupported version
         fclose(file);
+        init_month_index_manager();
         return -1;
     }
 
@@ -489,67 +484,94 @@ int load_data_from_file()
     if (fread(&total_budget, sizeof(double), 1, file) != 1)
     {
         fclose(file);
+        init_month_index_manager();
         return -1;
     }
 
-    // Read category count
-    if (fread(&category_count, sizeof(int), 1, file) != 1)
+    // Read category count and validate
+    if (fread(&category_count, sizeof(int), 1, file) != 1 || 
+        category_count > MAX_CATEGORIES || category_count < 0)
     {
         fclose(file);
+        init_month_index_manager();
         return -1;
     }
 
-    // Validate category count to prevent buffer overflow
-    if (category_count > MAX_CATEGORIES || category_count < 0)
-    {
-        fclose(file);
-        return -1;
-    }
-
-    // Read all categories at once
+    // Read categories
     if (fread(categories, sizeof(Category), category_count, file) != (size_t)category_count)
     {
         fclose(file);
+        init_month_index_manager();
         return -1;
     }
 
-    // Read transaction count
-    if (fread(&transaction_count, sizeof(int), 1, file) != 1)
+    if (version >= 2)
     {
-        fclose(file);
-        return -1;
-    }
+        // New format with month indexes
+        int index_count;
+        if (fread(&index_count, sizeof(int), 1, file) != 1)
+        {
+            fclose(file);
+            init_month_index_manager();
+            return -1;
+        }
 
-    // Validate transaction count to prevent buffer overflow
-    if (transaction_count > MAX_TRANSACTIONS || transaction_count < 0)
-    {
-        fclose(file);
-        return -1;
-    }
-
-    // Read all transactions at once
-    if (fread(transactions, sizeof(Transaction), transaction_count, file) != (size_t)transaction_count)
-    {
-        fclose(file);
-        return -1;
-    }
-
-    // Read subscription count
-    if (fread(&subscription_count, sizeof(int), 1, file) != 1)
-    {
-        // This might be an old file without subscriptions
-        subscription_count = 0;
-    }
-    else
-    {
-        // Validate subscription count to prevent buffer overflow
-        if (subscription_count > MAX_SUBSCRIPTIONS || subscription_count < 0)
+        // Initialize month index manager with loaded count
+        month_index_manager.capacity = index_count > 10 ? index_count : 10;
+        month_index_manager.indexes = malloc(sizeof(MonthIndex) * month_index_manager.capacity);
+        if (!month_index_manager.indexes)
         {
             fclose(file);
             return -1;
         }
+        month_index_manager.count = index_count;
 
-        // Read all subscriptions at once
+        // Read month indexes
+        if (fread(month_index_manager.indexes, sizeof(MonthIndex), index_count, file) != (size_t)index_count)
+        {
+            free_month_index_manager();
+            fclose(file);
+            return -1;
+        }
+    }
+    else
+    {
+        // Old format - need to convert existing transactions
+        int old_transaction_count;
+        if (fread(&old_transaction_count, sizeof(int), 1, file) != 1 || 
+            old_transaction_count > MAX_TRANSACTIONS || old_transaction_count < 0)
+        {
+            fclose(file);
+            init_month_index_manager();
+            return -1;
+        }
+
+        // Initialize month index manager
+        init_month_index_manager();
+
+        // Read and convert old transactions
+        Transaction old_trans;
+        for (int i = 0; i < old_transaction_count; i++)
+        {
+            if (fread(&old_trans, sizeof(Transaction), 1, file) != 1)
+            {
+                free_month_index_manager();
+                fclose(file);
+                return -1;
+            }
+            add_transaction(&old_trans);
+        }
+    }
+
+    // Read subscription count and validate
+    if (fread(&subscription_count, sizeof(int), 1, file) != 1 || 
+        subscription_count > MAX_SUBSCRIPTIONS || subscription_count < 0)
+    {
+        subscription_count = 0;
+    }
+    else
+    {
+        // Read subscriptions
         if (fread(subscriptions, sizeof(Subscription), subscription_count, file) != (size_t)subscription_count)
         {
             fclose(file);
@@ -558,6 +580,14 @@ int load_data_from_file()
     }
 
     fclose(file);
+
+    // Load current month's transactions
+    time_t now = time(NULL);
+    struct tm *today = localtime(&now);
+    current_month = today->tm_mon + 1;
+    current_year = today->tm_year + 1900;
+    load_month_transactions(current_year, current_month);
+
     return 1;
 }
 
@@ -663,46 +693,48 @@ int validate_day(int day, int month, int year)
     return day;
 }
 
-char* get_month_name() {
-    time_t now = time(NULL);
-    struct tm *today = localtime(&now);
-    static const char* month_names[] = {
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    };
-    return (char*)month_names[today->tm_mon];
-}
-
-void compute_monthly()
+void compute_monthly(int month, int year)
 {
-    time_t now = time(NULL);
-    struct tm *today = localtime(&now);
-    int current_month = today->tm_mon + 1;
-    int current_year = today->tm_year + 1900;
-    char year_month_pattern[8];
-    sprintf(year_month_pattern, "%04d-%02d", current_year, current_month);
+    if (month == 0 || year == 0)
+    {
+        time_t now = time(NULL);
+        struct tm *today = localtime(&now);
+        month = today->tm_mon + 1;
+        year = today->tm_year + 1900;
+    }
+
+    // Reset all category spending
     for (int i = 0; i < category_count; i++)
     {
         categories[i].spent = 0.0;
     }
-    for (int i = transaction_count - 1; i >= 0; i--)
+
+    // Load the requested month's transactions if not already loaded
+    if (month != loaded_month || year != loaded_year)
     {
-        if (strncmp(transactions[i].date, year_month_pattern, 7) != 0)
+        if (!load_month_transactions(year, month))
         {
-            break;
+            return;
         }
-        char *category_name = transactions[i].cat_name;
+        loaded_month = month;
+        loaded_year = year;
+    }
+
+    // Process all transactions for this month
+    for (int i = 0; i < current_month_transaction_count; i++)
+    {
+        char *category_name = current_month_transactions[i].cat_name;
         for (int j = 0; j < category_count; j++)
         {
             if (strcmp(categories[j].name, category_name) == 0)
             {
-                if (transactions[i].expense)
+                if (current_month_transactions[i].expense)
                 {
-                    categories[j].spent += transactions[i].amt;
+                    categories[j].spent += current_month_transactions[i].amt;
                 }
                 else
                 {
-                    categories[j].spent -= transactions[i].amt;
+                    categories[j].spent -= current_month_transactions[i].amt;
                 }
                 break;
             }

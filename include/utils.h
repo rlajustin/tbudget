@@ -12,6 +12,7 @@
 #include <pwd.h>
 #include <stdio.h>
 #include "globals.h"
+#include "transaction_manager.h"
 
 // Function prototypes for utils.c
 void write_export_content(FILE *export_file);
@@ -24,8 +25,7 @@ int create_directory_if_not_exists(const char *path);
 void initialize_data_directories();
 int get_days_in_month(int m, int y);
 int validate_day(int day, int month, int year);
-char* get_month_name();
-void compute_monthly();
+void compute_monthly(int month, int year);
 void sort_categories_by_budget();
 void sort_categories_by_spent();
 #endif // UTILS_H 

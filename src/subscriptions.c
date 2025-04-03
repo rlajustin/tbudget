@@ -1,7 +1,4 @@
-#include "globals.h"
 #include "subscriptions.h"
-#include <time.h>
-#include <string.h>
 
 // Helper function to check if a date string is before another date string
 bool is_date_before(const char *date1, const char *date2)
@@ -133,6 +130,7 @@ void update_subscription(int index)
   struct tm *today = localtime(&now);
   char today_date[11];
   get_today_date(today_date);
+
   // Skip if subscription hasn't started yet
   if (is_date_after(subscriptions[index].start_date, today_date))
     return;
@@ -141,41 +139,48 @@ void update_subscription(int index)
   if (is_date_before(subscriptions[index].end_date, today_date))
     return;
 
-  // Check if we need to create new transactions
-  char next_date[11];
-  bool should_create = false;
+  // Convert last_updated to string for comparison
+  char last_updated_date[11];
+  sprintf(last_updated_date, "%04d-%02d-%02d",
+          subscriptions[index].last_updated.tm_year + 1900,
+          subscriptions[index].last_updated.tm_mon + 1,
+          subscriptions[index].last_updated.tm_mday);
 
-  switch (subscriptions[index].period_type)
+  // Use last_updated as our iterator
+  char date_iterator[11];
+  strcpy(date_iterator, last_updated_date);
+
+  // Keep track of next occurrence date
+  char next_date[11];
+
+  // Iterate until we catch up to today
+  while (is_date_before(date_iterator, today_date))
   {
+    // Calculate next occurrence based on period type
+    switch (subscriptions[index].period_type)
+    {
     case PERIOD_WEEKLY:
-      get_next_weekday(subscriptions[index].start_date, subscriptions[index].period_day, next_date);
-      if (is_date_before(next_date, today_date))
-        should_create = true;
+      get_next_weekday(date_iterator, subscriptions[index].period_day, next_date);
       break;
 
     case PERIOD_MONTHLY:
-      get_next_monthly(subscriptions[index].start_date, subscriptions[index].period_day, next_date);
-      if (is_date_before(next_date, today_date))
-        should_create = true;
+      get_next_monthly(date_iterator, subscriptions[index].period_day, next_date);
       break;
 
     case PERIOD_YEARLY:
-      get_next_yearly(subscriptions[index].start_date, subscriptions[index].period_day,
-                    subscriptions[index].period_month_day, next_date);
-      if (is_date_before(next_date, today_date))
-        should_create = true;
+      get_next_yearly(date_iterator, subscriptions[index].period_month_day,
+                      subscriptions[index].period_day, next_date);
       break;
 
     case PERIOD_CUSTOM_DAYS:
-      add_days_to_date(subscriptions[index].start_date, subscriptions[index].period_day, next_date);
-      if (is_date_before(next_date, today_date))
-        should_create = true;
+      add_days_to_date(date_iterator, subscriptions[index].period_day, next_date);
       break;
-  }
+    }
 
-  if (should_create && transaction_count < MAX_TRANSACTIONS)
-  {
-    // Create new transaction
+    // If next occurrence is after today, we're done
+    if (is_date_after(next_date, today_date))
+      break;
+
     Transaction new_trans;
     new_trans.expense = subscriptions[index].expense;
     new_trans.amt = subscriptions[index].amount;
@@ -183,33 +188,14 @@ void update_subscription(int index)
     strcpy(new_trans.cat_name, subscriptions[index].cat_name);
     strcpy(new_trans.date, next_date);
 
-    // Insert transaction in correct position (most recent first)
-    int insert_pos = 0;
-    while (insert_pos < transaction_count &&
-           strcmp(transactions[insert_pos].date, new_trans.date) > 0)
-    {
-      insert_pos++;
-    }
+    add_transaction(&new_trans);
 
-    // Shift existing transactions
-    if (insert_pos < transaction_count)
-    {
-      for (int j = transaction_count; j > insert_pos; j--)
-      {
-        transactions[j] = transactions[j - 1];
-      }
-    }
-
-    // Insert new transaction
-    transactions[insert_pos] = new_trans;
-    transaction_count++;
-
-    // Update subscription's last_updated
-    subscriptions[index].last_updated = today->tm_yday + 1;
-
-    // Update start_date to next occurrence
-    strcpy(subscriptions[index].start_date, next_date);
+    // Update date_iterator to next occurrence for next iteration
+    strcpy(date_iterator, next_date);
   }
+
+  // Update subscription's last_updated to today
+  subscriptions[index].last_updated = *today;
 }
 
 // Function to update subscriptions and create transactions

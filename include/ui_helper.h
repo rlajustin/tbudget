@@ -6,8 +6,10 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
+#include <math.h>
 #include "globals.h"
 #include "utils.h"
+#include "transaction_manager.h"
 
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1

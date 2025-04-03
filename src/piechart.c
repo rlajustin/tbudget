@@ -1,42 +1,13 @@
 #include "piechart.h"
-#include <math.h>
-#include <string.h>
 
 #define PI 3.14159265358979323846
-
-// Array of possible slice colors - now foreground and background are the same for solid color blocks
-static const short pie_colors[][2] = {
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_YELLOW},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_GREEN},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_MAGENTA},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_CYAN},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_RED},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_BLUE},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_BLACK},
-    {OVERRIDE_COLOR_WHITE, OVERRIDE_COLOR_WHITE},
-};
-
-static const short pie_colors_darker[][2] = {
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_YELLOW},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_GREEN},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_MAGENTA},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_CYAN},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_RED},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_BLUE},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_BLACK},
-    {OVERRIDE_COLOR_BLACK, OVERRIDE_COLOR_WHITE},
-};
-
-// These are now defined in piechart.h
-// #define NUM_PIE_COLORS (sizeof(pie_colors) / sizeof(pie_colors[0]))
-// #define PIE_DARKER_COLOR_START (PIE_COLOR_START + NUM_PIE_COLORS)
 
 void init_pie_chart_colors()
 {
     // Initialize color pairs for the pie chart - normal colors
     for (int i = 0; i < (int)NUM_PIE_COLORS; i++)
     {
-        init_pair(PIE_COLOR_START + i, pie_colors[i][0], pie_colors[i][1]);
+        init_pair(PIE_COLOR_START + i, pie_colors[i][0], pie_colors[i][1]+8);
     }
     for (int i = 0; i < (int)NUM_PIE_COLORS; i++)
     {
@@ -57,17 +28,6 @@ static bool is_point_in_slice(double angle, double start_angle, double end_angle
 }
 
 // Get the appropriate character and determine which color pair to use based on distance from center
-static int get_pie_char(bool darker)
-{
-    if (darker)
-    {
-        return '#';
-    }
-    else
-    {
-        return ' ';
-    }
-}
 
 void draw_pie_chart(WINDOW *win, int center_y, int center_x, double height, double width, PieSlice slices[], int slice_count)
 {
@@ -123,15 +83,13 @@ void draw_pie_chart(WINDOW *win, int center_y, int center_x, double height, doub
                     {
                         // Determine if we should use the darker character variant
                         // for bottom portion of the pie chart (shadow effect)
-                        bool use_darker = sqrt(norm_x * norm_x * 0.6 + norm_y * norm_y) > 0.78 && dy > 0;
-
-                        int ch = get_pie_char(use_darker);
+                        bool use_darker = (sqrt(norm_x * norm_x * 0.6 + norm_y * norm_y) > 0.78 && dy > 0) || i == slice_count - 1;
 
                         int color = slices[i].color_pair;
 
-                        wattron(win, COLOR_PAIR(color));
-                        mvwaddch(win, y, x, ch);
-                        wattroff(win, COLOR_PAIR(color));
+                        wattron(win, COLOR_PAIR(use_darker ? color : color - NUM_PIE_COLORS));
+                        mvwaddch(win, y, x, ' ');
+                        wattroff(win, COLOR_PAIR(use_darker ? color : color - NUM_PIE_COLORS));
                         found = true;
                         break;
                     }
@@ -142,12 +100,10 @@ void draw_pie_chart(WINDOW *win, int center_y, int center_x, double height, doub
                 // If not in any slice (rounding errors), use the last slice color
                 if (!found && slice_count > 0)
                 {
-                    int ch = get_pie_char(false);
-
                     int color = slices[slice_count - 1].color_pair;
 
                     wattron(win, COLOR_PAIR(color));
-                    mvwaddch(win, y, x, ch);
+                    mvwaddch(win, y, x, ' ');
                     wattroff(win, COLOR_PAIR(color));
                 }
             }

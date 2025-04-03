@@ -1,6 +1,4 @@
 #include "flex_layout.h"
-#include <stdlib.h>
-#include <string.h>
 
 // Create a flex window item
 FlexItem flex_window(int flex_grow, int flex_basis, 

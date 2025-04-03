@@ -1,4 +1,3 @@
-#include "globals.h"
 #include "actions.h"
 
 // Helper function for adding a category in dashboard mode
@@ -120,27 +119,14 @@ void remove_category_dialog()
         return;
     }
 
-    const char *confirm_message[2];
+    const char *confirm_message[1];
     char message_buffer[100];
     sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", categories[cat_choice].name);
     confirm_message[0] = message_buffer;
-    confirm_message[1] = "Any transactions with this category will be uncategorized.";
-    int confirm = get_confirmation(dialog.textbox, confirm_message, 2);
+    int confirm = get_confirmation(dialog.textbox, confirm_message, 1);
 
     if (confirm == 0)
-    { // Yes, remove it
-        // Check if there are any transactions using this category
-        for (int i = 0; i < transaction_count; i++)
-        {
-            if (strcmp(transactions[i].cat_name, categories[cat_choice].name) == 0)
-            {
-                strcpy(transactions[i].cat_name, "Uncategorized");
-            }
-            else if (strcmp(transactions[i].cat_name, categories[cat_choice].name) > 0)
-            {
-                strcpy(transactions[i].cat_name, categories[cat_choice - 1].name);
-            }
-        }
+    {
 
         // Remove the category by shifting all categories after it one position back
         for (int i = cat_choice; i < category_count - 1; i++)
@@ -218,12 +204,6 @@ void add_expense_dialog()
 
     BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Add Expense", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
-
-    if (transaction_count >= MAX_TRANSACTIONS)
-    {
-        draw_error(dialog, "Maximum transactions reached.");
-        return;
-    }
 
     // Create dialog for transaction input
     if (category_count == 0)
@@ -330,34 +310,9 @@ void add_expense_dialog()
 
     strcpy(new_transaction.cat_name, categories[cat_choice].name);
 
-    // Find where to insert the new transaction by date (most recent first)
-    int insert_pos = 0;
-
-    // Since most recent dates are first (sorted in descending order),
-    // we need to find the first transaction with a date less than or equal to the new one
-    while (insert_pos < transaction_count &&
-           strcmp(transactions[insert_pos].date, new_transaction.date) > 0)
-    {
-        insert_pos++;
-    }
-
-    // We want to insert at the beginning of the same-date group
-    // We don't need to move further down for same dates
-
-    // Make room for the new transaction
-    if (insert_pos < transaction_count)
-    {
-        // Shift transactions down
-        for (int i = transaction_count; i > insert_pos; i--)
-        {
-            transactions[i] = transactions[i - 1];
-        }
-    }
-
-    // Insert the new transaction
-    transactions[insert_pos] = new_transaction;
-    transaction_count++;
-    save_data_to_file(); // Save after adding transaction
+    int year, month, day;
+    sscanf(new_transaction.date, "%d-%d-%d", &year, &month, &day);
+    add_transaction(&new_transaction);
 
     delete_bounded(dialog);
 }
@@ -372,7 +327,7 @@ void remove_transaction_dialog()
 
     // Keep the variable height calculation for transactions
     int max_display = 10;
-    int display_count = transaction_count < max_display ? transaction_count : max_display;
+    int display_count = current_month_transaction_count < max_display ? current_month_transaction_count : max_display;
     int dialog_height = display_count > 1 ? display_count + 8 : 10;
     int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
@@ -381,7 +336,7 @@ void remove_transaction_dialog()
     BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Remove Transaction", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
-    if (transaction_count == 0)
+    if (current_month_transaction_count == 0)
     {
         // Create a simple error dialog
         draw_error(dialog, "No transactions to remove.");
@@ -408,7 +363,7 @@ void remove_transaction_dialog()
     mvwprintw(dialog.textbox, 1, 0, "Select a transaction to remove:");
     wrefresh(dialog.textbox);
 
-    int trans_choice = get_transaction_choice(dialog.textbox, transactions, transaction_count, 10);
+    int trans_choice = get_transaction_choice(dialog.textbox, current_month_transactions, current_month_transaction_count, 10);
 
     if (trans_choice == -1)
     {
@@ -416,30 +371,30 @@ void remove_transaction_dialog()
         return;
     }
 
-    char category_name[MAX_NAME_LEN] = "Uncategorized";
-    strcpy(category_name, transactions[trans_choice].cat_name);
+    char category_name[MAX_NAME_LEN] = {0};
+    strcpy(category_name, current_month_transactions[trans_choice].cat_name);
 
     // Format date for display
     char display_date[11];
-    if (strlen(transactions[trans_choice].date) == 10)
+    if (strlen(current_month_transactions[trans_choice].date) == 10)
     {
         sprintf(display_date, "%c%c-%c%c-%c%c%c%c",
-                transactions[trans_choice].date[5], transactions[trans_choice].date[6], // Month
-                transactions[trans_choice].date[8], transactions[trans_choice].date[9], // Day
-                transactions[trans_choice].date[0], transactions[trans_choice].date[1], // Year
-                transactions[trans_choice].date[2], transactions[trans_choice].date[3]);
+                current_month_transactions[trans_choice].date[5], current_month_transactions[trans_choice].date[6], // Month
+                current_month_transactions[trans_choice].date[8], current_month_transactions[trans_choice].date[9], // Day
+                current_month_transactions[trans_choice].date[0], current_month_transactions[trans_choice].date[1], // Year
+                current_month_transactions[trans_choice].date[2], current_month_transactions[trans_choice].date[3]);
     }
     else
     {
-        strcpy(display_date, transactions[trans_choice].date);
+        strcpy(display_date, current_month_transactions[trans_choice].date);
     }
 
     const char *confirm_message[5];
 
     char message_buffer[4][100];
     sprintf(message_buffer[0], "Date: %s", display_date);
-    sprintf(message_buffer[1], "Description: %s", transactions[trans_choice].desc);
-    sprintf(message_buffer[2], "Amount: $%.2f", transactions[trans_choice].amt);
+    sprintf(message_buffer[1], "Description: %s", current_month_transactions[trans_choice].desc);
+    sprintf(message_buffer[2], "Amount: $%.2f", current_month_transactions[trans_choice].amt);
     sprintf(message_buffer[3], "Category: %s", category_name);
     confirm_message[0] = "Are you sure you want to remove this transaction?";
     confirm_message[1] = message_buffer[0];
@@ -451,12 +406,12 @@ void remove_transaction_dialog()
     if (confirm == 0)
     { // Yes, remove it
         // Remove the transaction by shifting all transactions after it one position back
-        for (int i = trans_choice; i < transaction_count - 1; i++)
+        for (int i = trans_choice; i < current_month_transaction_count - 1; i++)
         {
-            transactions[i] = transactions[i + 1];
+            current_month_transactions[i] = current_month_transactions[i + 1];
         }
 
-        transaction_count--;
+        current_month_transaction_count--;
         save_data_to_file(); // Save after removing transaction
     }
 
@@ -493,7 +448,7 @@ void budget_summary_dialog()
         options_values[num_options] = 1;
         num_options++;
     }
-    if (transaction_count > 0)
+    if (current_month_transaction_count > 0)
     {
         options_names[num_options] = "View Transactions";
         options_values[num_options] = 2;
@@ -521,7 +476,7 @@ void budget_summary_dialog()
         break;
     case 1:
         remove_category_dialog();
-        compute_monthly();
+        compute_monthly(current_month, current_year);
         break;
     case 2:
         draw_error(dialog, "Not implemented yet");
@@ -683,11 +638,11 @@ void add_subscription_dialog()
         delete_bounded(dialog);
         return; // User canceled
     }
+    getyx(dialog.textbox, y, x);
+    wmove(dialog.textbox, y + 1, 0);
     strncpy(new_sub.start_date, date_buffer, 10);
     new_sub.start_date[10] = '\0';
 
-    // Get end date (optional)
-    wclear(dialog.textbox);
     if (!get_date_input(dialog.textbox, date_buffer, "Enter end date (DD-MM-YYYY), or use same as start date for indefinite:"))
     {
         delete_bounded(dialog);
@@ -757,10 +712,14 @@ void add_subscription_dialog()
         strcpy(new_sub.cat_name, "Uncategorized");
     }
 
-    // Set initial last_updated to today
-    time_t now = time(NULL);
-    struct tm *today = localtime(&now);
-    new_sub.last_updated = today->tm_yday + 1; // tm_yday is 0-365, we want 1-366
+    // Set initial last_updated to start_date
+    struct tm start_tm = {0};
+    sscanf(new_sub.start_date, "%d-%d-%d", 
+           &start_tm.tm_year, &start_tm.tm_mon, &start_tm.tm_mday);
+    start_tm.tm_year -= 1900; // Adjust year (tm_year is years since 1900)
+    start_tm.tm_mon -= 1;     // Adjust month (tm_mon is 0-11)
+    mktime(&start_tm);        // Normalize the time
+    new_sub.last_updated = start_tm;
 
     // Add the subscription
     subscriptions[subscription_count++] = new_sub;
@@ -769,7 +728,7 @@ void add_subscription_dialog()
     delete_bounded(dialog);
 }
 
-void remove_subscription_dialog()
+void remove_subscription_dialog(int selected_subscription)
 {
     WINDOW *win = stdscr;
     int max_y, max_x;
@@ -783,9 +742,9 @@ void remove_subscription_dialog()
     BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Remove Subscription", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
 
-    if (subscription_count == 0)
+    if (selected_subscription == -1 || selected_subscription >= subscription_count)
     {
-        draw_error(dialog, "No subscriptions to remove.");
+        draw_error(dialog, "Subscription not found.");
         return;
     }
 
@@ -797,61 +756,9 @@ void remove_subscription_dialog()
         return;
     }
 
-    for (int i = 0; i < subscription_count; i++)
-    {
-        sub_menu[i] = malloc(MAX_NAME_LEN + 50); // Extra space for details
-        if (sub_menu[i] == NULL)
-        {
-            // Free previously allocated memory
-            for (int j = 0; j < i; j++)
-            {
-                free(sub_menu[j]);
-            }
-            free(sub_menu);
-            draw_error(dialog, "Memory allocation error.");
-            return;
-        }
-
-        const char *period_str;
-        switch (subscriptions[i].period_type)
-        {
-            case PERIOD_WEEKLY:
-                period_str = "Weekly";
-                break;
-            case PERIOD_MONTHLY:
-                period_str = "Monthly";
-                break;
-            case PERIOD_YEARLY:
-                period_str = "Yearly";
-                break;
-            default:
-                period_str = "Unknown";
-        }
-
-        sprintf(sub_menu[i], "%s (%s, $%.2f)", 
-                subscriptions[i].name,
-                period_str,
-                subscriptions[i].amount);
-    }
-
-    int sub_choice = get_scrollable_menu_choice(dialog.textbox, "Select a subscription to remove:", (const char **)sub_menu, subscription_count, 6, 1, true);
-
-    // Free allocated memory
-    for (int i = 0; i < subscription_count; i++)
-    {
-        free(sub_menu[i]);
-    }
-    free(sub_menu);
-
-    if (sub_choice == -1)
-    {
-        delete_bounded(dialog);
-        return; // User canceled
-    }
-
     const char *confirm_message[2];
     char message_buffer[100];
-    sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", subscriptions[sub_choice].name);
+    sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", subscriptions[selected_subscription].name);
     confirm_message[0] = message_buffer;
     confirm_message[1] = "This will not remove any transactions already created.";
     int confirm = get_confirmation(dialog.textbox, confirm_message, 2);
@@ -859,7 +766,7 @@ void remove_subscription_dialog()
     if (confirm == 0)
     { // Yes, remove it
         // Remove the subscription by shifting all subscriptions after it one position back
-        for (int i = sub_choice; i < subscription_count - 1; i++)
+        for (int i = selected_subscription; i < subscription_count - 1; i++)
         {
             subscriptions[i] = subscriptions[i + 1];
         }
