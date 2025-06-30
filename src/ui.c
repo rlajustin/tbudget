@@ -1,6 +1,6 @@
 #include "ui.h"
 
-int get_transaction_choice(WINDOW *win, const Transaction transactions[], int transaction_count, int max_visible_items) // optimized for case of many transactions
+int get_transaction_choice(WINDOW *win, TransactionNode **sorted_transactions, int transaction_count, int max_visible_items) // optimized for case of many transactions
 {
   int start_index = 0;
   int visible_items = max_visible_items;
@@ -45,53 +45,49 @@ int get_transaction_choice(WINDOW *win, const Transaction transactions[], int tr
         char row_item[MAX_NAME_LEN + 50] = "";
 
         char category_name[MAX_NAME_LEN] = "Uncategorized";
-        strcpy(category_name, transactions[i].cat_name);
+        strcpy(category_name, categories[sorted_transactions[i]->data.cat_index].name);
 
         // Format date for display
         char display_date[11] = "";
 
         // If this date is the same as the previous one, use blank space
-        if (strcmp(transactions[i].date, prev_date) == 0 && i != current_highlighted)
+        if (strcmp(sorted_transactions[i]->data.date, prev_date) == 0 && i != current_highlighted)
         {
           strcpy(display_date, "          ");
         }
         else
         {
-          // Format YYYY-MM-DD to MM-DD-YYYY for display
-          if (strlen(transactions[i].date) == 10)
+          // Format YYYY-MM-DD for display
+          if (strlen(sorted_transactions[i]->data.date) == 10)
           {
-            sprintf(display_date, "%c%c-%c%c-%c%c%c%c",
-                    transactions[i].date[5], transactions[i].date[6], // Month
-                    transactions[i].date[8], transactions[i].date[9], // Day
-                    transactions[i].date[0], transactions[i].date[1], // Year
-                    transactions[i].date[2], transactions[i].date[3]);
+            strcpy(display_date, sorted_transactions[i]->data.date);
           }
           else
           {
-            strcpy(display_date, transactions[i].date); // Use as is if format is unexpected
+            strcpy(display_date, sorted_transactions[i]->data.date); // Use as is if format is unexpected
           }
 
           // Remember this date for the next iteration
-          strcpy(prev_date, transactions[i].date);
+          strcpy(prev_date, sorted_transactions[i]->data.date);
         }
 
         // Create a descriptive menu item
         char desc[24] = "";
-        if (strlen(transactions[i].desc) > 23)
+        if (strlen(sorted_transactions[i]->data.desc) > 23)
         {
-          strncpy(desc, transactions[i].desc, 20);
+          strncpy(desc, sorted_transactions[i]->data.desc, 20);
           desc[20] = '\0';
           strcat(desc, "...");
         }
         else
         {
-          strcpy(desc, transactions[i].desc);
+          strcpy(desc, sorted_transactions[i]->data.desc);
         }
 
         sprintf(row_item, "%-10s %-24s $%-8.2f %-24s",
                 display_date,
                 desc,
-                transactions[i].amt,
+                sorted_transactions[i]->data.amt,
                 category_name);
 
         // Apply highlighting before printing if this is the current item
@@ -158,6 +154,260 @@ int get_transaction_choice(WINDOW *win, const Transaction transactions[], int tr
   return -1; // @dev this should never happen
 }
 
+int get_category_choice_subscription(WINDOW *win, int year, int month, char *subscription_name, char *subscription_category)
+{
+  int sorted_indices[MAX_CATEGORIES];
+  Category local_categories[MAX_CATEGORIES];
+  int local_category_count = 0;
+  if (read_month_categories(year, month, local_categories, &local_category_count) != 1)
+  {
+    mvwprintw(win, 0, 0, "Failed to load categories for %d-%d", year, month);
+    wrefresh(win);
+    napms(1000);
+    return -1;
+  }
+  // Filter local_categories for nonzero budgets
+  int valid_count = 0;
+  double max = 0.0;
+  for (int i = 0; i < local_category_count; i++)
+  {
+    sorted_indices[valid_count] = -1;
+    for (int j = 0; j < local_category_count; j++)
+    {
+      if (local_categories[j].budget > max)
+        sorted_indices[valid_count] = j;
+    }
+    if (sorted_indices[valid_count] == -1)
+      break;
+    max = 0.0;
+    valid_count++;
+  }
+  int start_index = 0;
+  int visible_items = getmaxy(win) - 6;
+  if (visible_items > valid_count)
+    visible_items = valid_count;
+  int current_highlighted = 0;
+  bool redraw = true;
+
+  keypad(win, TRUE);
+
+  mvwprintw(win, 0, 0, "Subscription \"%s\" (%s) didn't match any category for month %d-%d. Select one or press ESC to skip.", subscription_name, subscription_category, year, month);
+  mvwprintw(win, 3, 0, "%-30s %-15s %-15s", "Category", "Spent", "Budget");
+
+  while (1)
+  {
+    if (redraw)
+    {
+      if (start_index > 0)
+        mvwprintw(win, 2, getmaxx(win) - 3, "^");
+      else
+        mvwprintw(win, 2, getmaxx(win) - 3, " ");
+
+      if (start_index + visible_items < valid_count)
+        mvwprintw(win, 3 + visible_items, getmaxx(win) - 3, "v");
+      else
+        mvwprintw(win, 3 + visible_items, getmaxx(win) - 3, " ");
+
+      for (int i = start_index; i < start_index + visible_items && i < valid_count; i++)
+      {
+        int idx = sorted_indices[i];
+        wmove(win, 3 + i - start_index, 0);
+        wclrtoeol(win);
+        char name[MAX_NAME_LEN + 4];
+        if (strlen(local_categories[idx].name) > 29)
+        {
+          strncpy(name, local_categories[idx].name, 26);
+          name[26] = '\0';
+          strcat(name, "...");
+        }
+        else
+        {
+          strcpy(name, local_categories[idx].name);
+        }
+        if (i == current_highlighted)
+        {
+          wattron(win, COLOR_PAIR(5));
+        }
+        int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS - 1 ? NUM_PIE_COLORS - 2 : i);
+        wattron(win, COLOR_PAIR(color_pair));
+        mvwprintw(win, 3 + i - start_index, 2, "  ");
+        wattroff(win, COLOR_PAIR(color_pair));
+        mvwprintw(win, 3 + i - start_index, 4, " %-27s $%-14.2f $%-14.2f",
+                  name, local_categories[idx].spent, local_categories[idx].budget);
+        if (i == current_highlighted)
+        {
+          wattroff(win, COLOR_PAIR(5));
+        }
+      }
+      wrefresh(win);
+      redraw = false;
+    }
+    int ch = wgetch(win);
+    switch (ch)
+    {
+    case KEY_UP:
+    case 'k':
+    case 'K':
+      current_highlighted = (current_highlighted - 1) % category_count;
+      if (current_highlighted < start_index)
+      {
+        start_index = current_highlighted;
+      }
+      else if (current_highlighted >= start_index + visible_items)
+      {
+        start_index = current_highlighted - visible_items + 1;
+      }
+      redraw = true;
+      continue;
+    case KEY_DOWN:
+    case 'j':
+    case 'J':
+      current_highlighted = (current_highlighted + 1) % category_count;
+      if (current_highlighted >= start_index + visible_items)
+      {
+        start_index = current_highlighted - visible_items + 1;
+      }
+      else if (current_highlighted < start_index)
+      {
+        start_index = current_highlighted;
+      }
+      redraw = true;
+      continue;
+    case '\n':
+      return sorted_indices[current_highlighted];
+    case 27:
+      return -1;
+    case KEY_BACKSPACE:
+#if KEY_BACKSPACE_ALT != 127
+    case KEY_BACKSPACE_ALT:
+#endif
+    case 127:
+      return -1;
+    }
+  }
+  return -1;
+}
+
+int get_category_choice_recategorize(WINDOW *win, char *category_name)
+{
+  int start_index = 0;
+  int visible_items = getmaxy(win) - 6; // Leave space for header/footer
+  if (visible_items > category_count)
+    visible_items = category_count;
+  int current_highlighted = 0;
+  bool redraw = true;
+
+  keypad(win, TRUE);
+
+  mvwprintw(win, 0, 0, "You may choose a new category for transactions in category %s. ESC to leave them uncategorized.", category_name);
+
+  // Header
+  mvwprintw(win, 3, 0, "%-30s %-15s %-15s", "Category", "Spent", "Budget");
+
+  while (1)
+  {
+    if (redraw)
+    {
+      // Add scroll indicators if needed
+      if (start_index > 0)
+        mvwprintw(win, 2, getmaxx(win) - 3, "^");
+      else
+        mvwprintw(win, 2, getmaxx(win) - 3, " ");
+
+      if (start_index + visible_items < category_count)
+        mvwprintw(win, 3 + visible_items, getmaxx(win) - 3, "v");
+      else
+        mvwprintw(win, 3 + visible_items, getmaxx(win) - 3, " ");
+
+      // Print each visible category
+      for (int i = start_index; i < start_index + visible_items && i < category_count; i++)
+      {
+        wmove(win, 3 + i - start_index, 0);
+        wclrtoeol(win);
+
+        char name[MAX_NAME_LEN + 4];
+        if (strlen(categories[sorted_categories_indices[i]].name) > 29)
+        {
+          strncpy(name, categories[sorted_categories_indices[i]].name, 26);
+          name[26] = '\0';
+          strcat(name, "...");
+        }
+        else
+        {
+          strcpy(name, categories[sorted_categories_indices[i]].name);
+        }
+
+        if (i == current_highlighted)
+        {
+          wattron(win, COLOR_PAIR(5));
+        }
+
+        // Color block for pie chart legend
+        int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS - 1 ? NUM_PIE_COLORS - 2 : i);
+        wattron(win, COLOR_PAIR(color_pair));
+        mvwprintw(win, 3 + i - start_index, 2, "  ");
+        wattroff(win, COLOR_PAIR(color_pair));
+        mvwprintw(win, 3 + i - start_index, 4, " %-27s $%-14.2f $%-14.2f",
+                  name, categories[sorted_categories_indices[i]].spent, categories[sorted_categories_indices[i]].budget);
+
+        if (i == current_highlighted)
+        {
+          wattroff(win, COLOR_PAIR(5));
+        }
+      }
+      wrefresh(win);
+      redraw = false;
+    }
+
+    int ch = wgetch(win);
+    switch (ch)
+    {
+    case KEY_UP:
+    case 'k':
+    case 'K':
+      current_highlighted = (current_highlighted - 1) % category_count;
+      if (current_highlighted < start_index)
+      {
+        start_index = current_highlighted;
+      }
+      else if (current_highlighted >= start_index + visible_items)
+      {
+        start_index = current_highlighted - visible_items + 1;
+      }
+      redraw = true;
+      continue;
+    case KEY_DOWN:
+    case 'j':
+    case 'J':
+      current_highlighted = (current_highlighted + 1) % category_count;
+      if (current_highlighted >= start_index + visible_items)
+      {
+        start_index = current_highlighted - visible_items + 1;
+      }
+      else if (current_highlighted < start_index)
+      {
+        start_index = current_highlighted;
+      }
+      redraw = true;
+      continue;
+    case '\n':
+      if (category_count > 0)
+        return sorted_categories_indices[current_highlighted];
+      else
+        return -1;
+    case 27: // ESC
+      return -1;
+    case KEY_BACKSPACE:
+#if KEY_BACKSPACE_ALT != 127
+    case KEY_BACKSPACE_ALT:
+#endif
+    case 127:
+      return -1;
+    }
+  }
+  return -1;
+}
+
 void display_categories(WINDOW *win, int start_y)
 {
   int y = start_y;
@@ -170,34 +420,34 @@ void display_categories(WINDOW *win, int start_y)
 
   for (int i = 0; i < category_count; i++)
   {
-    total_allocated += categories[i].budget;
-    total_spent += categories[i].spent;
+    total_allocated += categories[sorted_categories_indices[i]].budget;
+    total_spent += categories[sorted_categories_indices[i]].spent;
 
     char name[MAX_NAME_LEN];
-    if (strlen(categories[i].name) > 29)
+    if (strlen(categories[sorted_categories_indices[i]].name) > 29)
     {
-      strncpy(name, categories[i].name, 26);
+      strncpy(name, categories[sorted_categories_indices[i]].name, 26);
       name[26] = '\0';
       strcat(name, "...");
     }
     else
     {
-      strcpy(name, categories[i].name);
+      strcpy(name, categories[sorted_categories_indices[i]].name);
     }
 
     // Display color block for pie chart legend
-    if (categories[i].budget > 0)
+    if (categories[sorted_categories_indices[i]].budget > 0.0)
     {
       int color_pair = PIE_COLOR_START + (i >= NUM_PIE_COLORS - 1 ? NUM_PIE_COLORS - 2 : i);
       wattron(win, COLOR_PAIR(color_pair));
       mvwprintw(win, y, 2, "  ");
       wattroff(win, COLOR_PAIR(color_pair));
       mvwprintw(win, y, 4, " %-27s", name);
-      if (categories[i].spent > categories[i].budget)
+      if (categories[sorted_categories_indices[i]].spent > categories[sorted_categories_indices[i]].budget)
       {
         wattron(win, COLOR_PAIR(3));
       }
-      else if (categories[i].spent < 0.5 * categories[i].budget)
+      else if (categories[sorted_categories_indices[i]].spent < 0.5 * categories[sorted_categories_indices[i]].budget)
       {
         wattron(win, COLOR_PAIR(2));
       }
@@ -205,22 +455,22 @@ void display_categories(WINDOW *win, int start_y)
       {
         wattron(win, COLOR_PAIR(1));
       }
-      mvwprintw(win, y, 32, " $%-14.2f", categories[i].spent);
+      mvwprintw(win, y, 32, " $%-14.2f", categories[sorted_categories_indices[i]].spent);
       wattroff(win, COLOR_PAIR(3) | COLOR_PAIR(2) | COLOR_PAIR(1));
-      mvwprintw(win, y++, 48, " $%-14.2f", categories[i].budget);
+      mvwprintw(win, y++, 48, " $%-14.2f", categories[sorted_categories_indices[i]].budget);
     }
     else
     {
       mvwprintw(win, y++, 2, "%-30s $%-14.2f $%-14.2f",
-                name, categories[i].spent, categories[i].budget);
+                name, categories[sorted_categories_indices[i]].spent, categories[sorted_categories_indices[i]].budget);
     }
   }
   mvwprintw(win, y++, 2, "-------------------------------------------------------------------");
 
-  if (total_allocated < total_budget)
+  if (total_allocated < current_month_total_budget)
   {
-    double savings = total_budget - total_allocated;
-    double savings_percent = (savings / total_budget) * 100.0;
+    double savings = current_month_total_budget - total_allocated;
+    double savings_percent = (savings / current_month_total_budget) * 100.0;
     mvwprintw(win, y, 2, "[]");
     mvwprintw(win, y++, 4, " %-27s %-15s $%.2f (%.2f%%)",
               "Savings", " ", savings, savings_percent);
@@ -228,8 +478,8 @@ void display_categories(WINDOW *win, int start_y)
   else
   {
     wattron(win, COLOR_PAIR(3));
-    double overspent = total_spent - total_budget;
-    double overspent_percent = (overspent / total_budget) * 100.0;
+    double overspent = total_spent - current_month_total_budget;
+    double overspent_percent = (overspent / current_month_total_budget) * 100.0;
     mvwprintw(win, y++, 2, "%-30s $%.2f (%.2f%%)",
               "Overspent", overspent, overspent_percent);
     wattroff(win, COLOR_PAIR(3));
@@ -286,9 +536,6 @@ void display_transactions(WINDOW *win, int start_y, int selected_transaction, in
   if (*first_display_transaction + displayable_rows < current_month_transaction_count)
     mvwprintw(win, y + displayable_rows, max_x - 3, "v");
 
-  // Sort transactions before display
-  sort_current_month_transactions();
-
   // Display visible transactions
   int last_display = *first_display_transaction + displayable_rows;
   if (last_display > current_month_transaction_count)
@@ -297,35 +544,30 @@ void display_transactions(WINDOW *win, int start_y, int selected_transaction, in
   for (int i = *first_display_transaction; i < last_display; i++)
   {
     char category_name[MAX_NAME_LEN] = "Uncategorized";
-    strcpy(category_name, current_month_transactions[i].cat_name);
-
+    strcpy(category_name, categories[sorted_transactions[i]->data.cat_index].name);
     // Format date for display
     char display_date[11];
 
     // If this date is the same as the previous one, use blank space
     // But always show date for selected transaction
-    if (strcmp(current_month_transactions[i].date, prev_date) == 0 && i != selected_transaction)
+    if (strcmp(sorted_transactions[i]->data.date, prev_date) == 0 && i != selected_transaction)
     {
       strcpy(display_date, "          ");
     }
     else
     {
-      // Format YYYY-MM-DD to MM-DD-YYYY for display
-      if (strlen(current_month_transactions[i].date) == 10)
+      // Format YYYY-MM-DD for display
+      if (strlen(sorted_transactions[i]->data.date) == 10)
       {
-        sprintf(display_date, "%c%c-%c%c-%c%c%c%c",
-                current_month_transactions[i].date[5], current_month_transactions[i].date[6], // Month
-                current_month_transactions[i].date[8], current_month_transactions[i].date[9], // Day
-                current_month_transactions[i].date[0], current_month_transactions[i].date[1], // Year
-                current_month_transactions[i].date[2], current_month_transactions[i].date[3]);
+        strcpy(display_date, sorted_transactions[i]->data.date);
       }
       else
       {
-        strcpy(display_date, current_month_transactions[i].date); // Use as is if format is unexpected
+        strcpy(display_date, sorted_transactions[i]->data.date); // Use as is if format is unexpected
       }
 
       // Remember this date for the next iteration
-      strcpy(prev_date, current_month_transactions[i].date);
+      strcpy(prev_date, sorted_transactions[i]->data.date);
     }
 
     // Highlight selected transaction
@@ -334,8 +576,8 @@ void display_transactions(WINDOW *win, int start_y, int selected_transaction, in
 
     mvwprintw(win, y++, 2, "%-10s %-24s $%-9.2f %-24s",
               display_date,
-              current_month_transactions[i].desc,
-              current_month_transactions[i].amt,
+              sorted_transactions[i]->data.desc,
+              sorted_transactions[i]->data.amt,
               category_name);
 
     if (i == selected_transaction && highlight_selected)
@@ -355,8 +597,8 @@ BoundedWindow draw_bar_chart(WINDOW *parent_win)
   // First calculate totals and prepare data
   for (int i = 0; i < category_count; i++)
   {
-    total_spent += categories[i].spent;
-    total_budget_allocated += categories[i].budget;
+    total_spent += categories[sorted_categories_indices[i]].spent;
+    total_budget_allocated += categories[sorted_categories_indices[i]].budget;
   }
 
   int bar_width = x - 20; // Leave some margin
@@ -384,10 +626,10 @@ BoundedWindow draw_bar_chart(WINDOW *parent_win)
   // Fill array with categories that have spending
   for (int i = 0; i < category_count; i++)
   {
-    if (categories[i].spent > 0)
+    if (categories[sorted_categories_indices[i]].spent > 0)
     {
       sorted_cats[num_active_cats].index = i;
-      sorted_cats[num_active_cats].pct = categories[i].spent / total_budget_allocated;
+      sorted_cats[num_active_cats].pct = categories[sorted_categories_indices[i]].spent / total_budget_allocated;
       num_active_cats++;
     }
   }
@@ -560,7 +802,7 @@ void display_subscriptions(WINDOW *win, int start_y, int selected_subscription, 
     strcat(row1, trunc_str(subscriptions[i].cat_name, 20));
     strcat(row1, "): ");
     char date_str[11];
-    sprintf(date_str, "%c%c-%c%c-%c%c%c%c", subscriptions[i].start_date[5], subscriptions[i].start_date[6], subscriptions[i].start_date[8], subscriptions[i].start_date[9], subscriptions[i].start_date[0], subscriptions[i].start_date[1], subscriptions[i].start_date[2], subscriptions[i].start_date[3]);
+    sprintf(date_str, "%s", subscriptions[i].start_date);
     strcat(row1, date_str);
     strcat(row1, " - ");
     if (strcmp(subscriptions[i].end_date, "9999-12-31") == 0)
@@ -569,7 +811,7 @@ void display_subscriptions(WINDOW *win, int start_y, int selected_subscription, 
     }
     else
     {
-      sprintf(date_str, "%c%c-%c%c-%c%c%c%c", subscriptions[i].end_date[5], subscriptions[i].end_date[6], subscriptions[i].end_date[8], subscriptions[i].end_date[9], subscriptions[i].end_date[0], subscriptions[i].end_date[1], subscriptions[i].end_date[2], subscriptions[i].end_date[3]);
+      sprintf(date_str, "%s", subscriptions[i].end_date);
       strcat(row1, date_str);
     }
     char amt[50] = {0};
@@ -615,5 +857,288 @@ void display_subscriptions(WINDOW *win, int start_y, int selected_subscription, 
     wmove(win, y + 1, 5);
     wprintw(win, "%s", trunc_str(row2, row_len));
     y += 2;
+  }
+}
+
+// Function to get date input with improved UX
+int get_date_input(WINDOW *win, char *date_buffer, char *prompt)
+{
+  int ch;
+  int highlighted_field = 2;           // 0 = year, 1 = month, 2 = day, 3 = "Today" button
+  int cursor_positions[3] = {0, 5, 8}; // Positions for YYYY-MM-DD: year, month, day
+  int y, x;
+  getyx(win, y, x);
+  mvwprintw(win, y, x, "%s", prompt);
+  y++;
+  x = 0;
+
+  // Enable keypad mode for this window to properly detect arrow keys
+  keypad(win, TRUE);
+
+  // Date components
+  int day = 1;
+  int month = 1;
+  int year = 2025;
+
+  // If we have a last transaction, use its date
+  if (current_month_transaction_count > 0)
+  {
+    char temp[5];
+    strncpy(temp, sorted_transactions[0]->data.date, 4);
+    temp[4] = '\0';
+    year = atoi(temp);
+
+    strncpy(temp, sorted_transactions[0]->data.date + 5, 2);
+    temp[2] = '\0';
+    month = atoi(temp);
+
+    strncpy(temp, sorted_transactions[0]->data.date + 8, 2);
+    temp[2] = '\0';
+    day = atoi(temp);
+  }
+
+  // Save original cursor state to restore later
+  int original_cursor_state = curs_set(1); // Show cursor and save original state
+
+  // Initial display
+  format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+  wnoutrefresh(win);
+  doupdate();
+
+  // Process input
+  while (1)
+  {
+    ch = wgetch(win);
+
+    if (ch == '\n')
+    {
+      // If "Today" button is selected, set to today's date
+      if (highlighted_field == 3)
+      {
+        time_t now = time(NULL);
+        struct tm *today = localtime(&now);
+        day = today->tm_mday;
+        month = today->tm_mon + 1;
+        year = today->tm_year + 1900;
+
+        // Show updated date
+        format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+        wnoutrefresh(win);
+        doupdate();
+
+        // Short delay to show the change
+        napms(300);
+
+        // Set the date buffer in YYYY-MM-DD format
+        sprintf(date_buffer, "%04d-%02d-%02d", year, month, day);
+
+        // Restore original cursor state
+        curs_set(original_cursor_state);
+        return 1;
+      }
+      else
+      {
+        // User is done editing, convert to YYYY-MM-DD format
+        sprintf(date_buffer, "%04d-%02d-%02d", year, month, day);
+
+        // Restore original cursor state
+        curs_set(original_cursor_state);
+        format_date(win, y, x, day, month, year, 4, cursor_positions);
+        return 1;
+      }
+    }
+    else if (ch == 27)
+    { // ASCII value for ESC key
+      // Always treat as a true escape in date input
+      curs_set(original_cursor_state);
+      return 0;
+    }
+    else if (ch == KEY_BACKSPACE || ch == 127 || ch == KEY_BACKSPACE_ALT)
+    {
+      // User wants to cancel input
+      curs_set(original_cursor_state);
+      return 0;
+    }
+    else if (ch == KEY_RIGHT)
+    {
+      // Move to next field
+      highlighted_field = (highlighted_field + 1) % 4;
+      format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+      wnoutrefresh(win);
+      doupdate();
+    }
+    else if (ch == KEY_LEFT)
+    {
+      // Move to previous field
+      highlighted_field = (highlighted_field + 3) % 4;
+      format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+      wnoutrefresh(win);
+      doupdate();
+    }
+    else if (ch == KEY_UP)
+    {
+      // Increase current field value
+      if (highlighted_field == 2)
+      {
+        day++;
+        if (day > get_days_in_month(month, year))
+        {
+          day = 1;
+          month++;
+          if (month > 12)
+          {
+            month = 1;
+            year++;
+          }
+        }
+      }
+      else if (highlighted_field == 1)
+      {
+        month++;
+        if (month > 12)
+        {
+          month = 1;
+          year++;
+        }
+        day = validate_day(day, month, year);
+      }
+      else if (highlighted_field == 0)
+      {
+        year++;
+        day = validate_day(day, month, year);
+      }
+      // No action for "Today" button
+
+      format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+      wnoutrefresh(win);
+      doupdate();
+    }
+    else if (ch == KEY_DOWN)
+    {
+      // Decrease current field value
+      if (highlighted_field == 2)
+      {
+        day--;
+        if (day < 1)
+        {
+          day = get_days_in_month(month, year);
+          month--;
+          if (month < 1)
+          {
+            month = 12;
+            year--;
+          }
+        }
+      }
+      else if (highlighted_field == 1)
+      {
+        month--;
+        if (month < 1)
+        {
+          month = 12;
+          year--;
+        }
+        day = validate_day(day, month, year);
+      }
+      else if (highlighted_field == 0)
+      {
+        year--;
+        day = validate_day(day, month, year);
+      }
+      // No action for "Today" button
+
+      format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+      wnoutrefresh(win);
+      doupdate();
+    }
+    else if (isdigit(ch) && highlighted_field < 3)
+    {
+      // Handle direct digit input for each field
+      int digit = ch - '0';
+
+      if (highlighted_field == 2)
+      { // Day field
+        day = day % 10 * 10 + digit;
+        if (day > get_days_in_month(month, year))
+        {
+          day = digit;
+        }
+        if (day == 0)
+        {
+          day = digit;
+        }
+      }
+      else if (highlighted_field == 1)
+      { // Month field
+        month = month % 10 * 10 + digit;
+        if (month > 12)
+        {
+          month = digit;
+        }
+        if (month == 0)
+        {
+          month = digit;
+        }
+        day = validate_day(day, month, year);
+      }
+      else if (highlighted_field == 0)
+      { // Year field
+        year = year % 1000 * 10 + digit;
+        day = validate_day(day, month, year);
+      }
+
+      format_date(win, y, x, day, month, year, highlighted_field, cursor_positions);
+      wnoutrefresh(win);
+      doupdate();
+    }
+  }
+}
+
+// Function to display the date in the input field and handle highlighting
+void format_date(WINDOW *win, int y, int x, int day, int month, int year, int highlighted_field, int cursor_positions[])
+{
+  // Create date string in YYYY-MM-DD format for display
+  char date_str[11];
+  sprintf(date_str, "%04d-%02d-%02d", year, month, day);
+
+  // Display the date string with the current field highlighted
+  for (int i = 0; i < 10; i++)
+  {
+    if ((i >= 0 && i <= 3 && highlighted_field == 0) || // Year
+        (i >= 5 && i <= 6 && highlighted_field == 1) || // Month
+        (i >= 8 && i <= 9 && highlighted_field == 2))   // Day
+    {
+      wattron(win, COLOR_PAIR(5)); // Highlight current field
+    }
+
+    mvwaddch(win, y, x + i, date_str[i]);
+
+    if ((i >= 0 && i <= 3 && highlighted_field == 0) ||
+        (i >= 5 && i <= 6 && highlighted_field == 1) ||
+        (i >= 8 && i <= 9 && highlighted_field == 2))
+    {
+      wattroff(win, COLOR_PAIR(4));
+    }
+  }
+
+  // Draw "Today" button
+  if (highlighted_field == 3)
+  {
+    wattron(win, COLOR_PAIR(5));
+  }
+  mvwprintw(win, y, x + 12, "[Today]");
+  if (highlighted_field == 3)
+  {
+    wattroff(win, COLOR_PAIR(5));
+  }
+
+  // Position cursor at the current field
+  if (highlighted_field < 3)
+  {
+    wmove(win, y, x + cursor_positions[highlighted_field]);
+  }
+  else
+  {
+    wmove(win, y, x + 12); // "Today" button
   }
 }

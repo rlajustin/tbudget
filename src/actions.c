@@ -25,7 +25,9 @@ void add_category_dialog()
     // Get category name
     wnoutrefresh(dialog.textbox);
 
-    if (!get_input(dialog.textbox, categories[category_count].name, "Enter category name: ", MAX_NAME_LEN, INPUT_STRING))
+    Category cat_to_add = {0};
+
+    if (!get_input(dialog.textbox, cat_to_add.name, "Enter category name: ", MAX_NAME_LEN, INPUT_STRING))
     {
         delete_bounded(dialog);
         return; // User canceled
@@ -47,12 +49,16 @@ void add_category_dialog()
         return;
     }
 
-    categories[category_count].budget = amount;
-    categories[category_count].spent = 0.0;
-    categories[category_count].extra = 0.0;
-    category_count++;
-    save_data_to_file(); // Save after adding category
-
+    cat_to_add.budget = amount;
+    cat_to_add.spent = 0.0;
+    cat_to_add.extra = 0.0;
+    int res = add_category(&cat_to_add, current_year, current_month);
+    if (res < 0)
+    {
+        char error_message[MAX_BUFFER];
+        sprintf(error_message, "Failed to add category: Error %d", res);
+        draw_error(dialog, error_message);
+    }
     delete_bounded(dialog);
 }
 
@@ -101,7 +107,7 @@ void remove_category_dialog()
             draw_error(dialog, "Memory allocation error.");
             return;
         }
-        sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[i].name, categories[i].budget);
+        sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[sorted_categories_indices[i]].name, categories[sorted_categories_indices[i]].budget);
     }
 
     int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6, 1, true);
@@ -121,21 +127,29 @@ void remove_category_dialog()
 
     const char *confirm_message[1];
     char message_buffer[100];
-    sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", categories[cat_choice].name);
+    sprintf(message_buffer, "Are you sure you want to remove \"%s\"?", categories[sorted_categories_indices[cat_choice]].name);
     confirm_message[0] = message_buffer;
     int confirm = get_confirmation(dialog.textbox, confirm_message, 1);
 
     if (confirm == 0)
     {
+        int result = remove_category(cat_choice, current_year, current_month);
 
-        // Remove the category by shifting all categories after it one position back
-        for (int i = cat_choice; i < category_count - 1; i++)
+        if (result < 1)
         {
-            categories[i] = categories[i + 1];
+            if (result == -4)
+            {
+                draw_error(dialog, "Cannot remove category with existing transactions.");
+            }
+            else if (result == -2)
+            {
+                draw_error(dialog, "Invalid category index.");
+            }
+            else
+            {
+                draw_error(dialog, "Failed to remove category.");
+            }
         }
-
-        category_count--;
-        save_data_to_file(); // Save after removing category
     }
 
     delete_bounded(dialog);
@@ -158,7 +172,7 @@ void set_budget_dialog()
     wnoutrefresh(dialog.boundary);
 
     // Current budget
-    mvwprintw(dialog.textbox, 2, 0, "Current Budget: $%.2f", total_budget);
+    mvwprintw(dialog.textbox, 2, 0, "Current Budget: $%.2f", current_month_total_budget);
     wmove(dialog.textbox, 3, 0);
     wnoutrefresh(dialog.textbox);
 
@@ -185,8 +199,14 @@ void set_budget_dialog()
         return;
     }
 
-    total_budget = new_budget;
-    save_data_to_file(); // Save after budget update
+    current_month_total_budget = new_budget;
+    int res = set_budget(new_budget, current_year, current_month);
+    if (res == 0)
+    {
+        char error_message[MAX_BUFFER];
+        sprintf(error_message, "Failed to set budget: Error %d", res);
+        draw_error(dialog, error_message);
+    }
     delete_bounded(dialog);
 }
 
@@ -245,7 +265,7 @@ void add_expense_dialog()
     new_transaction.amt = amount;
 
     char date_buffer[11] = "";
-    if (!get_date_input(dialog.textbox, date_buffer, "Enter date (DD-MM-YYYY): "))
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter date (YYYY-MM-DD): "))
     {
         delete_bounded(dialog);
         return; // User canceled
@@ -290,7 +310,7 @@ void add_expense_dialog()
             draw_error(dialog, "Memory allocation error.");
             return;
         }
-        sprintf(category_menu[i], "%s", categories[i].name);
+        sprintf(category_menu[i], "%s", categories[sorted_categories_indices[i]].name);
     }
 
     int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category for this expense:", (const char **)category_menu, category_count, 6, 1, true);
@@ -307,12 +327,17 @@ void add_expense_dialog()
         delete_bounded(dialog);
         return;
     }
-
-    strcpy(new_transaction.cat_name, categories[cat_choice].name);
+    new_transaction.cat_index = cat_choice;
 
     int year, month, day;
     sscanf(new_transaction.date, "%d-%d-%d", &year, &month, &day);
-    add_transaction(&new_transaction);
+    int result = add_transaction(&new_transaction, year, month);
+    if (result < 0)
+    {
+        char error_message[MAX_BUFFER];
+        sprintf(error_message, "Failed to add transaction: Error %d", result);
+        draw_error(dialog, error_message);
+    }
 
     delete_bounded(dialog);
 }
@@ -338,7 +363,6 @@ void remove_transaction_dialog()
 
     if (current_month_transaction_count == 0)
     {
-        // Create a simple error dialog
         draw_error(dialog, "No transactions to remove.");
         return;
     }
@@ -363,7 +387,7 @@ void remove_transaction_dialog()
     mvwprintw(dialog.textbox, 1, 0, "Select a transaction to remove:");
     wrefresh(dialog.textbox);
 
-    int trans_choice = get_transaction_choice(dialog.textbox, current_month_transactions, current_month_transaction_count, 10);
+    int trans_choice = get_transaction_choice(dialog.textbox, sorted_transactions, current_month_transaction_count, 10);
 
     if (trans_choice == -1)
     {
@@ -372,29 +396,25 @@ void remove_transaction_dialog()
     }
 
     char category_name[MAX_NAME_LEN] = {0};
-    strcpy(category_name, current_month_transactions[trans_choice].cat_name);
+    strcpy(category_name, categories[sorted_transactions[trans_choice]->data.cat_index].name);
 
     // Format date for display
     char display_date[11];
-    if (strlen(current_month_transactions[trans_choice].date) == 10)
+    if (strlen(sorted_transactions[trans_choice]->data.date) == 10)
     {
-        sprintf(display_date, "%c%c-%c%c-%c%c%c%c",
-                current_month_transactions[trans_choice].date[5], current_month_transactions[trans_choice].date[6], // Month
-                current_month_transactions[trans_choice].date[8], current_month_transactions[trans_choice].date[9], // Day
-                current_month_transactions[trans_choice].date[0], current_month_transactions[trans_choice].date[1], // Year
-                current_month_transactions[trans_choice].date[2], current_month_transactions[trans_choice].date[3]);
+        strcpy(display_date, sorted_transactions[trans_choice]->data.date);
     }
     else
     {
-        strcpy(display_date, current_month_transactions[trans_choice].date);
+        strcpy(display_date, sorted_transactions[trans_choice]->data.date);
     }
 
     const char *confirm_message[5];
 
     char message_buffer[4][100];
     sprintf(message_buffer[0], "Date: %s", display_date);
-    sprintf(message_buffer[1], "Description: %s", current_month_transactions[trans_choice].desc);
-    sprintf(message_buffer[2], "Amount: $%.2f", current_month_transactions[trans_choice].amt);
+    sprintf(message_buffer[1], "Description: %s", sorted_transactions[trans_choice]->data.desc);
+    sprintf(message_buffer[2], "Amount: $%.2f", sorted_transactions[trans_choice]->data.amt);
     sprintf(message_buffer[3], "Category: %s", category_name);
     confirm_message[0] = "Are you sure you want to remove this transaction?";
     confirm_message[1] = message_buffer[0];
@@ -405,14 +425,11 @@ void remove_transaction_dialog()
 
     if (confirm == 0)
     { // Yes, remove it
-        // Remove the transaction by shifting all transactions after it one position back
-        for (int i = trans_choice; i < current_month_transaction_count - 1; i++)
+        int result = remove_transaction(trans_choice);
+        if (result == 0)
         {
-            current_month_transactions[i] = current_month_transactions[i + 1];
+            draw_error(dialog, "Failed to remove transaction.");
         }
-
-        current_month_transaction_count--;
-        save_data_to_file(); // Save after removing transaction
     }
 
     delete_bounded(dialog);
@@ -476,7 +493,6 @@ void budget_summary_dialog()
         break;
     case 1:
         remove_category_dialog();
-        compute_monthly(current_month, current_year);
         break;
     case 2:
         draw_error(dialog, "Not implemented yet");
@@ -497,7 +513,7 @@ void add_subscription_dialog()
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
-    int dialog_height = DEFAULT_DIALOG_HEIGHT;
+    int dialog_height = 14;
     int dialog_width = DEFAULT_DIALOG_WIDTH;
     int start_y = (max_y - dialog_height) / 2;
     int start_x = (max_x - dialog_width) / 2;
@@ -530,8 +546,7 @@ void add_subscription_dialog()
 
     const char *type_menu[] = {
         "Expense",
-        "Income"
-    };
+        "Income"};
     int y, x;
     getyx(dialog.textbox, y, x);
     int type_choice = get_scrollable_menu_choice(dialog.textbox, "Select type:", type_menu, 2, 5, y, false);
@@ -547,8 +562,7 @@ void add_subscription_dialog()
         "Weekly",
         "Monthly",
         "Yearly",
-        "Custom Days"
-    };
+        "Custom Days"};
     wclear(dialog.textbox);
     mvwprintw(dialog.textbox, 1, 0, "Select period:");
     int period_choice = get_scrollable_menu_choice(dialog.textbox, "", period_menu, 4, 5, 1, false);
@@ -563,77 +577,85 @@ void add_subscription_dialog()
     wclear(dialog.textbox);
     switch (period_choice)
     {
-        case PERIOD_WEEKLY:
+    case PERIOD_WEEKLY:
+    {
+        getyx(dialog.textbox, y, x);
+        const char *day_menu[] = {
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday"};
+        mvwprintw(dialog.textbox, 1, 0, "Select day of the week:");
+        int day_choice = get_menu_choice(dialog.textbox, day_menu, 7, 2, true);
+        if (day_choice == -1)
         {
-            const char *day_menu[] = {
-                "Sunday",
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday"
-            };
-            mvwprintw(dialog.textbox, 1, 0, "Select day of week:");
-            int day_choice = get_scrollable_menu_choice(dialog.textbox, "", day_menu, 7, 5, 1, false);
-            if (day_choice == -1)
-            {
-                delete_bounded(dialog);
-                return; // User canceled
-            }
-            new_sub.period_day = day_choice;
-            break;
+            delete_bounded(dialog);
+            return; // User canceled
         }
-        case PERIOD_MONTHLY:
-        {
-            int day;
-            wclear(dialog.textbox);
-            if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
-            {
-                delete_bounded(dialog);
-                return; // User canceled
-            }
-            new_sub.period_day = (day < 1) ? 1 : (day > 31) ? 31 : day;
-            break;
-        }
-        case PERIOD_YEARLY:
-        {
-            int month;
-            wclear(dialog.textbox);
-            if (!get_input(dialog.textbox, &month, "Enter month (1-12): ", MAX_BUFFER, INPUT_INT))
-            {
-                delete_bounded(dialog);
-                return; // User canceled
-            }
-            new_sub.period_day = (month < 1) ? 1 : (month > 12) ? 12 : month;
+        new_sub.period_day = day_choice;
 
-            int day;
-            wclear(dialog.textbox);
-            if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
-            {
-                delete_bounded(dialog);
-                return; // User canceled
-            }
-            new_sub.period_month_day = (day < 1) ? 1 : (day > 31) ? 31 : day;
-            break;
-        }
-        case PERIOD_CUSTOM_DAYS:
+        mvwprintw(dialog.textbox, 1, 0, "Select day of the week: %s", day_menu[day_choice]);
+        wclrtobot(dialog.textbox);
+        wmove(dialog.textbox, 2, 0);
+        break;
+    }
+    case PERIOD_MONTHLY:
+    {
+        int day;
+        wclear(dialog.textbox);
+        if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
         {
-            int days;
-            wclear(dialog.textbox);
-            if (!get_input(dialog.textbox, &days, "Enter number of days between recurrences (1-365): ", MAX_BUFFER, INPUT_INT))
-            {
-                delete_bounded(dialog);
-                return; // User canceled
-            }
-            new_sub.period_day = (days < 1) ? 1 : (days > 365) ? 365 : days;
-            break;
+            delete_bounded(dialog);
+            return; // User canceled
         }
+        new_sub.period_day = (day < 1) ? 1 : (day > 31) ? 31
+                                                        : day;
+        break;
+    }
+    case PERIOD_YEARLY:
+    {
+        int month;
+        wclear(dialog.textbox);
+        if (!get_input(dialog.textbox, &month, "Enter month (1-12): ", MAX_BUFFER, INPUT_INT))
+        {
+            delete_bounded(dialog);
+            return; // User canceled
+        }
+        new_sub.period_day = (month < 1) ? 1 : (month > 12) ? 12
+                                                            : month;
+
+        int day;
+        wclear(dialog.textbox);
+        if (!get_input(dialog.textbox, &day, "Enter day of month (1-31): ", MAX_BUFFER, INPUT_INT))
+        {
+            delete_bounded(dialog);
+            return; // User canceled
+        }
+        new_sub.period_month_day = (day < 1) ? 1 : (day > 31) ? 31
+                                                              : day;
+        break;
+    }
+    case PERIOD_CUSTOM_DAYS:
+    {
+        int days;
+        wclear(dialog.textbox);
+        if (!get_input(dialog.textbox, &days, "Enter number of days between recurrences (1-365): ", MAX_BUFFER, INPUT_INT))
+        {
+            delete_bounded(dialog);
+            return; // User canceled
+        }
+        new_sub.period_day = (days < 1) ? 1 : (days > 365) ? 365
+                                                           : days;
+        break;
+    }
     }
 
     // Get start date
     char date_buffer[11];
-    if (!get_date_input(dialog.textbox, date_buffer, "Enter start date (DD-MM-YYYY): "))
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter start date (YYYY-MM-DD): "))
     {
         delete_bounded(dialog);
         return; // User canceled
@@ -643,7 +665,7 @@ void add_subscription_dialog()
     strncpy(new_sub.start_date, date_buffer, 10);
     new_sub.start_date[10] = '\0';
 
-    if (!get_date_input(dialog.textbox, date_buffer, "Enter end date (DD-MM-YYYY), or use same as start date for indefinite:"))
+    if (!get_date_input(dialog.textbox, date_buffer, "Enter end date (YYYY-MM-DD), or use same as start date for indefinite:"))
     {
         delete_bounded(dialog);
         return; // User canceled
@@ -714,7 +736,7 @@ void add_subscription_dialog()
 
     // Set initial last_updated to start_date
     struct tm start_tm = {0};
-    sscanf(new_sub.start_date, "%d-%d-%d", 
+    sscanf(new_sub.start_date, "%d-%d-%d",
            &start_tm.tm_year, &start_tm.tm_mon, &start_tm.tm_mday);
     start_tm.tm_year -= 1900; // Adjust year (tm_year is years since 1900)
     start_tm.tm_mon -= 1;     // Adjust month (tm_mon is 0-11)
@@ -723,7 +745,7 @@ void add_subscription_dialog()
 
     // Add the subscription
     subscriptions[subscription_count++] = new_sub;
-    save_data_to_file();
+    add_subscription(&new_sub, today_year, today_month);
 
     delete_bounded(dialog);
 }
@@ -771,7 +793,7 @@ void remove_subscription_dialog(int selected_subscription)
             subscriptions[i] = subscriptions[i + 1];
         }
         subscription_count--;
-        save_data_to_file();
+        // TODO: save to file
     }
 
     delete_bounded(dialog);

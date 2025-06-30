@@ -1,6 +1,38 @@
 # tbudget
 
-A simple TUI budget management application designed for you know exactly the type of person you are if you are at all interested in this application which solves a nonexistent problem. Built with ncurses and probably like 100 Cursor calls to claude-3.7 since the C language is too hard for me. Built and tested on Apple silicon so compatibility mileage may vary. If you find a bug and fix it that would be nice. Assume the rest of this readme was AI-generated.
+A simple TUI budget management application designed for you know exactly the type of person you are if you are at all interested in this application which solves a nonexistent problem. Built with ncurses and probably like 100 Cursor calls to claude since the C language is too hard for me. Built and tested on Apple silicon so compatibility mileage may vary. If you find a bug and fix it that would be nice. Assume the rest of this readme was AI-generated.
+
+### TODO
+
+- [ ] changes should be temporary until the user saves
+  - make add/remove transactions and stuff take arrays of txs instead of a singular tx
+  - make sure the new file buffer can be parsed before actually saving
+- [ ] notification system?
+- [ ] proper export system, maybe even a (somewhat) generic import system? let the user choose which columns are what
+
+### File Structure:
+
+```
+header:
+
+// main file:
+header: sizeof(FileHeader) (maybe should add buffer?)
+constants: NUM_CONSTANTS * int
+subscriptions:
+- subscription count: int
+- every subscription sizeof(Subscription)
+default monthly budget
+default category count
+default categories
+
+// month file
+month budget (double)
+category count (int)
+categories (sizeof(Category) * MAX_CATEGORIES)
+uncategorized spending (double)
+number of transactions (int)
+transactions (num transactions * sizeof(Transaction))  // these are not ordered
+```
 
 ## Features
 
@@ -81,6 +113,7 @@ If not installed system-wide, run it from the build directory:
 The application supports two different display modes:
 
 - **Menu-based Mode** (default): Navigate through separate screens for budget setup and transactions
+
   ```bash
   tbudget
   tbudget -m
@@ -89,6 +122,7 @@ The application supports two different display modes:
   ```
 
 - **Dashboard Mode**: View budget summary and transactions in a single full-screen interface
+
   ```bash
   tbudget -d
   tbudget --dashboard
@@ -96,18 +130,21 @@ The application supports two different display modes:
   ```
 
 - **Export Data**: Export budget data to a CSV file
+
   ```bash
   tbudget -e
   tbudget --export
   ```
 
 - **Import Data**: Import budget data from a CSV file
+
   ```bash
   tbudget -i filename.csv
   tbudget --import filename.csv
   ```
 
 - **View Export History**: View a list of all timestamped export files
+
   ```bash
   tbudget -l
   tbudget --history
@@ -126,6 +163,7 @@ The application supports two different display modes:
 The application consists of two main screens:
 
 1. **Budget Setup**
+
    - Set your total monthly budget
    - Create categories for your expenses (e.g., Rent, Food, Transportation)
    - Allocate amounts to each category
@@ -141,6 +179,7 @@ The application consists of two main screens:
 The dashboard mode provides a full-screen overview with:
 
 - **Budget Summary Panel** (top half)
+
   - Shows total budget and all budget categories
   - Displays allocation percentages and remaining funds
 
@@ -148,6 +187,7 @@ The dashboard mode provides a full-screen overview with:
   - Shows all recorded transactions with details
 
 **Keyboard Controls in Dashboard Mode:**
+
 - `q` - Quit the application
 - `b` - Go to budget setup
 - `a` - Add a transaction
@@ -206,10 +246,12 @@ TBudget automatically exports your data to CSV whenever you make changes, ensuri
 In addition to automatic exports, TBudget supports manual import/export operations:
 
 - **Manual Export**
+
   ```bash
   tbudget -e
   tbudget --export
   ```
+
   This exports your data to the CSV file in your data directory.
 
 - **Manual Import**
@@ -247,6 +289,7 @@ TBudget automatically stores your budget data in a file called `tbudget.dat`, en
 ### Automatic Data Storage and Export
 
 - Data is automatically saved and exported whenever you:
+
   - Exit the application
   - Update your total budget
   - Add a new category
@@ -261,10 +304,12 @@ TBudget automatically stores your budget data in a file called `tbudget.dat`, en
 In addition to automatic saving and exporting, TBudget supports manual import/export operations via command-line options:
 
 - **Manual Export**
+
   ```bash
   ./tbudget -e
   ./tbudget --export
   ```
+
   This exports your data to `tbudget_export.csv`.
 
 - **Manual Import**
@@ -282,4 +327,4 @@ The exported CSV file (`tbudget_export.csv`) follows this structure:
 2. A CATEGORIES section listing all budget categories with amounts and percentages
 3. A TRANSACTIONS section listing all transactions with descriptions, amounts, categories, and dates
 
-This file is always up-to-date with your latest changes and can be opened directly in any spreadsheet application for additional analysis or reporting. 
+This file is always up-to-date with your latest changes and can be opened directly in any spreadsheet application for additional analysis or reporting.

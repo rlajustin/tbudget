@@ -7,31 +7,38 @@
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
-#include "globals.h"
-#include "utils.h"
-#include "transaction_manager.h"
 
+// Color Overrides
+#define OVERRIDE_COLOR_BLACK 0
+#define OVERRIDE_COLOR_RED 1
+#define OVERRIDE_COLOR_GREEN 2
+#define OVERRIDE_COLOR_YELLOW 4
+#define OVERRIDE_COLOR_BLUE 3
+#define OVERRIDE_COLOR_MAGENTA 5
+#define OVERRIDE_COLOR_CYAN 6
+#define OVERRIDE_COLOR_WHITE -1
+
+#define KEY_BACKSPACE_ALT 127
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1
 #define ALIGN_RIGHT 2
 #define MAX_CHILD_WINDOWS 5  // Maximum number of child windows
 
-// Forward declaration for the structure
 typedef struct BoundedWindow BoundedWindow;
+
+struct BoundedWindow
+{
+    WINDOW *textbox;
+    WINDOW *boundary;
+    BoundedWindow **children; // Array of child windows
+    int child_count;          // Number of child windows
+};
 
 typedef enum InputType {
   INPUT_STRING,
   INPUT_DOUBLE,
   INPUT_INT,
 } InputType;
-
-// Simplified BoundedWindow structure with children
-struct BoundedWindow {
-  WINDOW *textbox;
-  WINDOW *boundary;
-  BoundedWindow **children;     // Array of child windows
-  int child_count;              // Number of child windows
-};
 
 void setup_ncurses();
 void cleanup_ncurses();
@@ -64,9 +71,5 @@ int get_confirmation(WINDOW *win, const char *message[], int item_count);
 int get_menu_choice(WINDOW *win, const char *menu_items[], int item_count, int start_y, int allow_back);
 int get_scrollable_menu_choice(WINDOW *win, char* prompt, const char *menu_items[], int item_count, int max_visible_items, int start_y, bool show_numbers);
 int get_input(WINDOW *win, void *return_value, char* prompt, int max_len, InputType type);
-int get_date_input(WINDOW *win, char *date_buffer, char* prompt);
-
-// other helper
-void format_date(WINDOW *win, int y, int x, int day, int month, int year, int highlighted_field, int cursor_positions[]);
 
 #endif // UI_HELPER_H

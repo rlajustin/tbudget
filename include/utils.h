@@ -1,31 +1,21 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <ncurses.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <unistd.h>
-#include <pwd.h>
-#include <stdio.h>
 #include "globals.h"
-#include "transaction_manager.h"
+#include "saveload.h"
 
-// Function prototypes for utils.c
-void write_export_content(FILE *export_file);
-void export_data_to_csv(int silent);
-void import_data_from_csv(const char *filename);
-void save_data_to_file();
-int load_data_from_file();
-char *get_home_directory();
-int create_directory_if_not_exists(const char *path);
-void initialize_data_directories();
 int get_days_in_month(int m, int y);
 int validate_day(int day, int month, int year);
-void compute_monthly(int month, int year);
 void sort_categories_by_budget();
-void sort_categories_by_spent();
-#endif // UTILS_H 
+int compare_transactions_by_date(const void *a, const void *b);
+void cleanup_transactions();
+
+// macOS notification utility for debugging
+#ifdef __APPLE__
+void show_macos_notification(const char *title, const char *message);
+#endif
+
+int get_month_from_date(const char *date);
+int get_year_from_date(const char *date);
+
+#endif // UTILS_H

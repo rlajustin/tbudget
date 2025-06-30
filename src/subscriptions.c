@@ -130,6 +130,7 @@ void update_subscription(int index)
   struct tm *today = localtime(&now);
   char today_date[11];
   get_today_date(today_date);
+  int cat_index = -1, cat_index_month = -1, cat_index_year = -1;
 
   // Skip if subscription hasn't started yet
   if (is_date_after(subscriptions[index].start_date, today_date))
@@ -152,6 +153,17 @@ void update_subscription(int index)
 
   // Keep track of next occurrence date
   char next_date[11];
+  WINDOW *win = stdscr;
+  int max_y, max_x;
+  getmaxyx(win, max_y, max_x);
+
+  // Keep the variable height calculation for transactions
+  int max_display = 10;
+  int display_count = current_month_transaction_count < max_display ? current_month_transaction_count : max_display;
+  int dialog_height = display_count > 1 ? display_count + 8 : 10;
+  int dialog_width = DEFAULT_DIALOG_WIDTH;
+  int start_y = (max_y - dialog_height) / 2;
+  int start_x = (max_x - dialog_width) / 2;
 
   // Iterate until we catch up to today
   while (is_date_before(date_iterator, today_date))
@@ -181,14 +193,29 @@ void update_subscription(int index)
     if (is_date_after(next_date, today_date))
       break;
 
-    Transaction new_trans;
-    new_trans.expense = subscriptions[index].expense;
-    new_trans.amt = subscriptions[index].amount;
+    Transaction new_trans = {
+        .expense = subscriptions[index].expense,
+        .amt = subscriptions[index].amount,
+        .cat_index = cat_index};
     strcpy(new_trans.desc, subscriptions[index].name);
-    strcpy(new_trans.cat_name, subscriptions[index].cat_name);
     strcpy(new_trans.date, next_date);
+    new_trans.date[sizeof(new_trans.date) - 1] = '\0';
+    int month = get_month_from_date(new_trans.date);
+    int year = get_year_from_date(new_trans.date);
+    if (cat_index_month != month || cat_index_year != year)
+    {
+      cat_index_month = month;
+      cat_index_year = year;
+      cat_index = get_category_index(year, month, subscriptions[index].cat_name);
+    }
+    if (cat_index == -1)
+    {
+      BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Updating Subscriptions", false, ALIGN_CENTER);
+      wnoutrefresh(dialog.boundary);
+      cat_index = get_category_choice_subscription(dialog.textbox, year, month, subscriptions[index].name, subscriptions[index].cat_name);
+    }
 
-    add_transaction(&new_trans);
+    add_transaction(&new_trans, year, month);
 
     // Update date_iterator to next occurrence for next iteration
     strcpy(date_iterator, next_date);

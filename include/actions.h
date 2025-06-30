@@ -5,8 +5,8 @@
 #include <string.h>
 #include "utils.h"
 #include "ui.h"
-#include "transaction_manager.h"
 #include "globals.h"
+#include "saveload.h"
 
 // Dashboard mode helper functions
 void add_category_dialog();

@@ -4,31 +4,25 @@
 #include <ncurses.h>
 #include <time.h>
 #include <string.h>
+#include <stddef.h>
+#include "flex_layout.h"
 
 // Constants
-#define MAX_CATEGORIES 20
-#define MAX_NAME_LEN 50
-#define MAX_TRANSACTIONS 10000000 // you are probably not extremely wealthy so this should be enough
+#define NUM_CONSTANTS 2
 #define MAX_BUFFER 1024
 #define DEFAULT_DIALOG_HEIGHT 10
 #define DEFAULT_DIALOG_WIDTH 70
-#define MAX_SUBSCRIPTIONS 1000
+#define MAX_SUBSCRIPTIONS 1024
+
+// must be constant for savefiles
+#define MAX_CATEGORIES 32
+#define MAX_NAME_LEN 32
 
 // Period types for subscriptions
 #define PERIOD_WEEKLY 0
 #define PERIOD_MONTHLY 1
 #define PERIOD_YEARLY 2
 #define PERIOD_CUSTOM_DAYS 3
-
-// Color Overrides
-#define OVERRIDE_COLOR_BLACK 0
-#define OVERRIDE_COLOR_RED 1
-#define OVERRIDE_COLOR_GREEN 2
-#define OVERRIDE_COLOR_YELLOW 4
-#define OVERRIDE_COLOR_BLUE 3
-#define OVERRIDE_COLOR_MAGENTA 5
-#define OVERRIDE_COLOR_CYAN 6
-#define OVERRIDE_COLOR_WHITE -1
 
 // Window definitions
 #define ACTIONS_MENU_WINDOW 0
@@ -53,8 +47,7 @@ static inline char *trunc_str(const char *str, size_t len)
 }
 
 // Key definitions
-#define KEY_BACKSPACE_ALT 127
-#define KEY_ESCAPE 27
+// #define KEY_ESCAPE 27
 
 // Mode definitions
 #define MODE_MENU 1
@@ -69,18 +62,18 @@ static inline char *trunc_str(const char *str, size_t len)
 // Structures
 typedef struct
 {
-    char name[MAX_NAME_LEN];
     double budget;
     double spent;
     double extra;
+    char name[MAX_NAME_LEN];
 } Category;
 
 typedef struct
 {
     bool expense;
     double amt;
+    int cat_index;
     char desc[MAX_NAME_LEN];
-    char cat_name[MAX_NAME_LEN];
     char date[11]; // Format: YYYY-MM-DD
 } Transaction;
 
@@ -98,34 +91,31 @@ typedef struct
     char cat_name[MAX_NAME_LEN]; // Category for the subscription
 } Subscription;
 
-// Structure to hold file position information for a month's transactions
-typedef struct {
-    int year;                    // Year (e.g., 2024)
-    int month;                   // Month (1-12)
-    long file_position;          // Position in file where transactions start
-    int transaction_count;       // Number of transactions in this month
-    bool loaded;                 // Whether this month is currently loaded in memory
-} MonthIndex;
+typedef struct TransactionNode
+{
+    Transaction data;
+    struct TransactionNode *next;
+    struct TransactionNode *prev;
+    int index; // index of the transaction in the LL
+} TransactionNode;
 
-// Structure to manage month indexes
-typedef struct {
-    MonthIndex *indexes;         // Array of month indexes
-    int count;                   // Number of month indexes
-    int capacity;               // Current capacity of the indexes array
-} MonthIndexManager;
-
-// Global variables
-extern Category categories[MAX_CATEGORIES];
-extern int category_count;
-extern Transaction *current_month_transactions;  // Dynamic array for current month
-extern Transaction *current_month_transactions_sorted;  // Dynamic array for current month
-extern int current_month_transaction_count;
-extern double total_budget;
+// Global variables from data file (loaded by init)
 extern Subscription subscriptions[MAX_SUBSCRIPTIONS];
 extern int subscription_count;
+extern double default_monthly_budget;
+extern Category default_categories[MAX_CATEGORIES];
+extern int default_category_count;
+
+// Global variables dependent on current month (loaded by load_month)
+extern int category_count;
+extern Category categories[MAX_CATEGORIES];
+extern int sorted_categories_indices[MAX_CATEGORIES];
+extern double uncategorized_spent;
+extern double current_month_total_budget;
 
 // Month management
-extern MonthIndexManager month_index_manager;
+extern int today_month;
+extern int today_year;
 extern int current_month;
 extern int current_year;
 extern int loaded_month;
@@ -134,16 +124,23 @@ extern int loaded_year;
 // Global file paths
 extern char app_data_dir[MAX_BUFFER];
 extern char data_storage_dir[MAX_BUFFER];
-extern char data_file_path[MAX_BUFFER];
 extern char export_file_path[MAX_BUFFER];
+extern char data_file_path[MAX_BUFFER];
 
 extern const short pie_colors[][2];
 extern const short pie_colors_darker[][2];
 
-static const char *days_in_week[] = {
+extern TransactionNode *transaction_head;
+extern TransactionNode *transaction_tail;
+extern TransactionNode **sorted_transactions; // array of pointers to transactions, sorted (this is cursed)
+extern int current_month_transaction_count;
+
+static const char days_in_week[][10] = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-static const char *month_names[] = {
+static const char month_names[][10] = {
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"};
+
+extern FlexContainer *main_layout;
 
 #endif

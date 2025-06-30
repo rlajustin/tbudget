@@ -4,137 +4,122 @@
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
-    int mode = MODE_MENU; // Default mode
+    // int mode = MODE_MENU; // Default mode
 
     initialize_data_directories();
+    init_file_cache();     // Initialize the file cache
+    cache_recent_months(); // Cache the 10 most recent months
 
     time_t now = time(NULL);
     struct tm *today = localtime(&now);
-    current_month = today->tm_mon + 1;
-    current_year = today->tm_year + 1900;
+    today_month = today->tm_mon + 1;
+    today_year = today->tm_year + 1900;
+    current_month = today_month;
+    current_year = today_year;
 
-    sort_categories_by_budget();
-    compute_monthly(current_month, current_year);
-    update_subscriptions(); // Update subscriptions and create transactions
-
-    // Parse command line arguments
-    if (argc > 1)
+    int res = load_budget_data();
+    if (res < 0)
     {
-        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)
-        {
-            print_usage(argv[0]);
-            return 0;
-        }
-        else if (strcmp(argv[1], "--menu") == 0 || strcmp(argv[1], "-m") == 0)
-        {
-            mode = MODE_MENU;
-        }
-        else if (strcmp(argv[1], "--dashboard") == 0 || strcmp(argv[1], "-d") == 0)
-        {
-            mode = MODE_DASHBOARD;
-        }
-        else if (strcmp(argv[1], "--export") == 0 || strcmp(argv[1], "-e") == 0)
-        {
-            // Export data to CSV and exit
-            load_data_from_file();
-            export_data_to_csv(0); // Not silent, show message
-            printf("Data exported to %s\n", export_file_path);
-            return 0;
-        }
-        else if (strcmp(argv[1], "--history") == 0 || strcmp(argv[1], "-l") == 0)
-        {
-            // List export history by directly using system command
-            printf("Export history files in '%s' directory:\n\n", data_storage_dir);
-            char mkdir_cmd[MAX_BUFFER];
-            sprintf(mkdir_cmd, "mkdir -p %s", data_storage_dir);
-            system(mkdir_cmd);
-
-            char ls_cmd[MAX_BUFFER];
-            sprintf(ls_cmd, "ls -lt %s", data_storage_dir);
-            system(ls_cmd);
-
-            printf("\nTo use a specific export file, import it with:\n");
-            printf("  %s --import %s/filename.csv\n", argv[0], data_storage_dir);
-            return 0;
-        }
-        else if (strcmp(argv[1], "--import") == 0 || strcmp(argv[1], "-i") == 0)
-        {
-            // Import data from CSV
-            if (argc < 3)
-            {
-                fprintf(stderr, "Error: Import requires a filename\n");
-                fprintf(stderr, "Usage: %s --import <filename>\n", argv[0]);
-                return 1;
-            }
-            setup_ncurses(); // Need to initialize for proper cleanup
-            import_data_from_csv(argv[2]);
-            save_data_to_file();
-            cleanup_ncurses();
-            printf("Data imported from %s\n", argv[2]);
-            return 0;
-        }
-        else
-        {
-            // Try to parse as a number
-            char *endptr;
-            long val = strtol(argv[1], &endptr, 10);
-
-            if (*endptr == '\0')
-            { // Successful conversion
-                if (val == MODE_MENU)
-                {
-                    mode = MODE_MENU;
-                }
-                else if (val == MODE_DASHBOARD)
-                {
-                    mode = MODE_DASHBOARD;
-                }
-                else
-                {
-                    fprintf(stderr, "Invalid mode: %ld\n", val);
-                    print_usage(argv[0]);
-                    return 1;
-                }
-            }
-            else
-            {
-                fprintf(stderr, "Invalid argument: %s\n", argv[1]);
-                print_usage(argv[0]);
-                return 1;
-            }
-        }
+        fprintf(stderr, "Failed to initialize data from file: %d\n", res);
+        return -1;
     }
-    else
+
+    if ((res = load_month(current_year, current_month)) < 0)
     {
-        print_usage(argv[0]);
-        return 1;
+        fprintf(stderr, "Failed to load budget data: %d\n", res);
+        return -1;
     }
 
-    int load_result = load_data_from_file();
-    if (load_result < 0)
-    {
-        fprintf(stderr, "Error: Failed to load data from file: %d\n", load_result);
-        return 1;
-    }
+    // // Parse command line arguments
+    // if (argc > 1)
+    // {
+    //     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)
+    //     {
+    //         print_usage(argv[0]);
+    //         return 0;
+    //     }
+    //     else if (strcmp(argv[1], "--dashboard") == 0 || strcmp(argv[1], "-d") == 0)
+    //     {
+    //         mode = MODE_DASHBOARD;
+    //     }
+    //     else if (strcmp(argv[1], "--export") == 0 || strcmp(argv[1], "-e") == 0)
+    //     {
+    //         // Export data to CSV and exit
+    //         // load_data_from_file();
+    //         // export_data_to_csv(0); // Not silent, show message
+    //         printf("Data exported to %s\n", export_file_path);
+    //         return 0;
+    //     }
+    //     else if (strcmp(argv[1], "--history") == 0 || strcmp(argv[1], "-l") == 0)
+    //     {
+    //         // List export history by directly using system command
+    //         printf("Export history files in '%s' directory:\n\n", data_storage_dir);
+    //         char mkdir_cmd[MAX_BUFFER];
+    //         sprintf(mkdir_cmd, "mkdir -p %s", data_storage_dir);
+    //         system(mkdir_cmd);
 
-    // Initialize data directories
-    setup_ncurses();
+    //         char ls_cmd[MAX_BUFFER];
+    //         sprintf(ls_cmd, "ls -lt %s", data_storage_dir);
+    //         system(ls_cmd);
 
-    // Run the appropriate mode
-    if (mode == MODE_MENU)
-    {
-        run_menu_mode();
-    }
-    else
-    { // mode == MODE_DASHBOARD
-        run_dashboard_mode();
-    }
+    //         printf("\nTo use a specific export file, import it with:\n");
+    //         printf("  %s --import %s/filename.csv\n", argv[0], data_storage_dir);
+    //         return 0;
+    //     }
+    //     else if (strcmp(argv[1], "--import") == 0 || strcmp(argv[1], "-i") == 0)
+    //     {
+    //         // Import data from CSV
+    //         if (argc < 3)
+    //         {
+    //             fprintf(stderr, "Error: Import requires a filename\n");
+    //             fprintf(stderr, "Usage: %s --import <filename>\n", argv[0]);
+    //             return 1;
+    //         }
+    //         import_data_from_csv(argv[2]);
+    //         // TODO: save to file
+    //         cleanup_ncurses();
+    //         printf("Data imported from %s\n", argv[2]);
+    //         return 0;
+    //     }
+    //     else
+    //     {
+    //         // Try to parse as a number
+    //         char *endptr;
+    //         long val = strtol(argv[1], &endptr, 10);
 
-    save_data_to_file();
-    curs_set(1);
-    cleanup_ncurses();
+    //         if (*endptr == '\0')
+    //         { // Successful conversion
+    //             if (val == MODE_MENU)
+    //             {
+    //                 mode = MODE_MENU;
+    //             }
+    //             else if (val == MODE_DASHBOARD)
+    //             {
+    //                 mode = MODE_DASHBOARD;
+    //             }
+    //             else
+    //             {
+    //                 fprintf(stderr, "Invalid mode: %ld\n", val);
+    //                 print_usage(argv[0]);
+    //                 return 1;
+    //             }
+    //         }
+    //         else
+    //         {
+    //             fprintf(stderr, "Invalid argument: %s\n", argv[1]);
+    //             print_usage(argv[0]);
+    //             return 1;
+    //         }
+    //     }
+    // }
+    // else
+    // {
+    //     print_usage(argv[0]);
+    //     return 1;
+    // }
 
-    return 0;
+    res = run_dashboard_mode();
+    return res;
 }
 
 // Print usage information
@@ -156,43 +141,44 @@ void print_usage(const char *program_name)
     fprintf(stderr, "Data is stored in %s\n", app_data_dir);
 }
 
-// The original menu-based mode
-void run_menu_mode()
-{
-    const char *main_menu[] = {
-        "1. Do nothing",
-        "2. Go dashboard mode",
-        "3. Exit"};
-    int menu_size = sizeof(main_menu) / sizeof(main_menu[0]);
+// // The original menu-based mode
+// void run_menu_mode()
+// {
+//     const char *main_menu[] = {
+//         "1. Do nothing",
+//         "2. Go dashboard mode",
+//         "3. Exit"};
+//     int menu_size = sizeof(main_menu) / sizeof(main_menu[0]);
 
-    while (1)
-    {
-        clear();
-        draw_title(stdscr, "TBudget - Budget Management Tool");
+//     while (1)
+//     {
+//         clear();
+//         draw_title(stdscr, "TBudget - Budget Management Tool");
 
-        int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
+//         int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
 
-        if (choice == -1)
-        {
-            return; // Escape or unexpected input
-        }
+//         if (choice == -1)
+//         {
+//             return; // Escape or unexpected input
+//         }
 
-        switch (choice)
-        {
-        case 0: // Budget Setup (index 0 corresponds to option 1)
-            break;
-        case 1: // Manage Transactions
-            run_dashboard_mode();
-            break;
-        case 2: // Exit
-            return;
-        }
-    }
-}
+//         switch (choice)
+//         {
+//         case 0: // Budget Setup (index 0 corresponds to option 1)
+//             break;
+//         case 1: // Manage Transactions
+//             run_dashboard_mode();
+//             break;
+//         case 2: // Exit
+//             return;
+//         }
+//     }
+// }
 
 // New dashboard mode that shows everything at once with flexible boxes
-void run_dashboard_mode()
+int run_dashboard_mode()
 {
+    setup_ncurses();
     WINDOW *win = stdscr;
     int ch;
 
@@ -235,7 +221,6 @@ void run_dashboard_mode()
     bool show_pie_chart = true; // Flag to toggle between table and pie chart view
 
     // Create flex layout containers
-    FlexContainer *main_layout = NULL;
     FlexContainer *top_row = NULL;
     FlexContainer *bottom_row = NULL;
 
@@ -250,10 +235,21 @@ void run_dashboard_mode()
     // Vim-style navigation count buffer
     char count_buffer[16] = {0}; // Buffer to store the count prefix
     int count_buffer_pos = 0;    // Current position in the count buffer
+    int res;
+
+    update_subscriptions(); // Update subscriptions and create transactions
 
     // Main dashboard loop
     while (1)
     {
+        if (current_month != loaded_month || current_year != loaded_year)
+        {
+            if ((res = load_month(current_year, current_month)) < 0)
+            {
+                fprintf(stderr, "Failed to load budget data: %d\n", res);
+                return 0;
+            }
+        }
         if (needs_redraw)
         {
             // Recalculate sizes in case of window resize
@@ -325,7 +321,7 @@ void run_dashboard_mode()
 
             const char *month = month_names[current_month];
             // Display budget summary
-            mvwprintw(budget_win.textbox, 1, 2, "%s %d Budget: $%.2f", month, current_year, total_budget);
+            mvwprintw(budget_win.textbox, 1, 2, "%s %d Budget: $%.2f", month, current_year, current_month_total_budget);
             if (category_count > 0)
             {
                 // Show tabular view
@@ -391,13 +387,9 @@ void run_dashboard_mode()
             count_buffer_pos = 0;
             if (is_leaving)
             {
-                // Clean up layout
-                if (main_layout != NULL)
-                {
-                    free_flex_layout(main_layout);
-                }
                 delete_bounded_array(all_windows, NUM_WINDOWS);
-                return;
+                save_and_exit();
+                return 0;
             }
             else
             {
@@ -522,20 +514,17 @@ void run_dashboard_mode()
                 {
                 case 0: // Add Expense
                     add_expense_dialog();
-                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
                 case 1: // Remove Transaction
                     remove_transaction_dialog();
-                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
                 case 2: // Add Subscription
                     add_subscription_dialog();
                     update_subscriptions();
-                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
 
@@ -545,12 +534,12 @@ void run_dashboard_mode()
                     BoundedWindow alert = draw_alert("Export to CSV", export_msg, 1);
                     doupdate();
 
-                    // Export the data
-                    export_data_to_csv(0);
+                    // // Export the data
+                    // export_data_to_csv(0);
 
                     // Show the alert
                     char export_path[MAX_BUFFER];
-                    sprintf(export_path, "Export complete! Exported to: %.30s", export_file_path);
+                    sprintf(export_path, "Export doesn't work but if it did, it would be exported to: %.30s", export_file_path);
                     const char *export_path_msg[] = {export_path};
                     draw_alert_persistent("Export to CSV", export_path_msg, 1);
                     delete_bounded(alert);
@@ -559,22 +548,24 @@ void run_dashboard_mode()
                 }
                 case 5: // Previous Month
                     current_month--;
-                    if (current_month > 12)
+                    if (current_month < 1)
                     {
-                        current_month = 1;
+                        current_month = 12;
                         current_year--;
                     }
-                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
                 case 6: // Next Month
+                    if (current_month == today_month && current_year == today_year)
+                    {
+                        break;
+                    }
                     current_month++;
                     if (current_month > 12)
                     {
                         current_month = 1;
                         current_year++;
                     }
-                    compute_monthly(current_month, current_year);
                     needs_redraw = true;
                     break;
                 case 7: // Exit Dashboard
@@ -584,7 +575,7 @@ void run_dashboard_mode()
                         free_flex_layout(main_layout);
                     }
                     delete_bounded_array(all_windows, NUM_WINDOWS);
-                    return;
+                    return 0;
                 }
                 break;
             case BUDGET_SUMMARY_WINDOW:
@@ -593,7 +584,6 @@ void run_dashboard_mode()
                 break;
             case SUBSCRIPTIONS_WINDOW:
                 remove_subscription_dialog(selected_subscription);
-                compute_monthly(current_month, current_year);
                 needs_redraw = true;
                 break;
             }
@@ -607,7 +597,6 @@ void run_dashboard_mode()
             case SUBSCRIPTIONS_WINDOW:
                 add_subscription_dialog();
                 update_subscriptions();
-                compute_monthly(current_month, current_year);
                 needs_redraw = true;
                 break;
             }
@@ -616,4 +605,29 @@ void run_dashboard_mode()
         memset(count_buffer, 0, sizeof(count_buffer));
         count_buffer_pos = 0;
     }
+}
+
+int save_and_exit()
+{
+    // bool success = true;
+    // int res = save_data_to_file();
+    // if (res < 0)
+    // {
+    //     fprintf(stderr, "Failed to save data to file: %d\n", res);
+    //     success = false;
+    // }
+    int res = cleanup_file_cache();
+    if (res < 0)
+    {
+        fprintf(stderr, "Failed to cleanup file cache: %d\n", res);
+        // success = false;
+    }
+    if (main_layout != NULL)
+    {
+        free_flex_layout(main_layout);
+    }
+    cleanup_transactions();
+    cleanup_ncurses();
+    curs_set(1);
+    return 0;
 }

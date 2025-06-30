@@ -7,7 +7,7 @@ void init_pie_chart_colors()
     // Initialize color pairs for the pie chart - normal colors
     for (int i = 0; i < (int)NUM_PIE_COLORS; i++)
     {
-        init_pair(PIE_COLOR_START + i, pie_colors[i][0], pie_colors[i][1]+8);
+        init_pair(PIE_COLOR_START + i, pie_colors[i][0], pie_colors[i][1] + 8);
     }
     for (int i = 0; i < (int)NUM_PIE_COLORS; i++)
     {
@@ -135,19 +135,19 @@ void display_budget_pie_chart(WINDOW *win, double width, double height)
 
     for (int i = 0; i < category_count; i++)
     {
-        if (categories[i].budget > 0)
+        if (categories[sorted_categories_indices[i]].budget > 0)
         {
-            used_budget += categories[i].budget;
+            used_budget += categories[sorted_categories_indices[i]].budget;
             if (i >= NUM_PIE_COLORS - 1)
             {
                 strcpy(slices[slice_count - 1].label, "Other");
-                slices[slice_count - 1].percentage += (categories[i].budget / total_budget) * 100.0;
+                slices[slice_count - 1].percentage += (categories[sorted_categories_indices[i]].budget / current_month_total_budget) * 100.0;
             }
             else
             {
-                slices[slice_count].percentage = (categories[i].budget / total_budget) * 100.0;
+                slices[slice_count].percentage = (categories[sorted_categories_indices[i]].budget / current_month_total_budget) * 100.0;
                 slices[slice_count].color_pair = PIE_DARKER_COLOR_START + i;
-                strncpy(slices[slice_count].label, categories[i].name, MAX_NAME_LEN - 1);
+                strncpy(slices[slice_count].label, categories[sorted_categories_indices[i]].name, MAX_NAME_LEN - 1);
                 slices[slice_count].label[MAX_NAME_LEN - 1] = '\0';
                 slice_count++;
             }
