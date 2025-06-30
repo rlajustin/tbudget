@@ -7,6 +7,7 @@
 #include "ui.h"
 #include "globals.h"
 #include "saveload.h"
+#include "subscriptions.h"
 
 // Dashboard mode helper functions
 void add_category_dialog();

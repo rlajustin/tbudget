@@ -107,7 +107,7 @@ void remove_category_dialog()
             draw_error(dialog, "Memory allocation error.");
             return;
         }
-        sprintf(category_menu[i], "%d. %s ($%.2f)", i + 1, categories[sorted_categories_indices[i]].name, categories[sorted_categories_indices[i]].budget);
+        sprintf(category_menu[i], "%s ($%.2f)", categories[sorted_categories_indices[i]].name, categories[sorted_categories_indices[i]].budget);
     }
 
     int cat_choice = get_scrollable_menu_choice(dialog.textbox, "Select a category to remove:", (const char **)category_menu, category_count, 6, 1, true);
@@ -493,6 +493,7 @@ void budget_summary_dialog()
         break;
     case 1:
         remove_category_dialog();
+        // sorted inside of this
         break;
     case 2:
         draw_error(dialog, "Not implemented yet");
@@ -520,12 +521,6 @@ void add_subscription_dialog()
 
     BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Add Subscription", false, ALIGN_CENTER);
     wnoutrefresh(dialog.boundary);
-
-    if (subscription_count >= MAX_SUBSCRIPTIONS)
-    {
-        draw_error(dialog, "Maximum number of subscriptions reached.");
-        return;
-    }
 
     // Create a new subscription
     Subscription new_sub;
@@ -743,9 +738,12 @@ void add_subscription_dialog()
     mktime(&start_tm);        // Normalize the time
     new_sub.last_updated = start_tm;
 
-    // Add the subscription
-    subscriptions[subscription_count++] = new_sub;
-    add_subscription(&new_sub, today_year, today_month);
+    int res = add_subscription(&new_sub);
+    if (res == -1)
+    {
+        draw_error(dialog, "Error adding subscription");
+    }
+    update_subscriptions();
 
     delete_bounded(dialog);
 }
@@ -786,14 +784,8 @@ void remove_subscription_dialog(int selected_subscription)
     int confirm = get_confirmation(dialog.textbox, confirm_message, 2);
 
     if (confirm == 0)
-    { // Yes, remove it
-        // Remove the subscription by shifting all subscriptions after it one position back
-        for (int i = selected_subscription; i < subscription_count - 1; i++)
-        {
-            subscriptions[i] = subscriptions[i + 1];
-        }
-        subscription_count--;
-        // TODO: save to file
+    {
+        remove_subscription(selected_subscription);
     }
 
     delete_bounded(dialog);

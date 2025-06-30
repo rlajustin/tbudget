@@ -141,40 +141,6 @@ void print_usage(const char *program_name)
     fprintf(stderr, "Data is stored in %s\n", app_data_dir);
 }
 
-// // The original menu-based mode
-// void run_menu_mode()
-// {
-//     const char *main_menu[] = {
-//         "1. Do nothing",
-//         "2. Go dashboard mode",
-//         "3. Exit"};
-//     int menu_size = sizeof(main_menu) / sizeof(main_menu[0]);
-
-//     while (1)
-//     {
-//         clear();
-//         draw_title(stdscr, "TBudget - Budget Management Tool");
-
-//         int choice = get_menu_choice(stdscr, main_menu, menu_size, 10, 0);
-
-//         if (choice == -1)
-//         {
-//             return; // Escape or unexpected input
-//         }
-
-//         switch (choice)
-//         {
-//         case 0: // Budget Setup (index 0 corresponds to option 1)
-//             break;
-//         case 1: // Manage Transactions
-//             run_dashboard_mode();
-//             break;
-//         case 2: // Exit
-//             return;
-//         }
-//     }
-// }
-
 // New dashboard mode that shows everything at once with flexible boxes
 int run_dashboard_mode()
 {
@@ -524,7 +490,6 @@ int run_dashboard_mode()
 
                 case 2: // Add Subscription
                     add_subscription_dialog();
-                    update_subscriptions();
                     needs_redraw = true;
                     break;
 
@@ -621,6 +586,11 @@ int save_and_exit()
     {
         fprintf(stderr, "Failed to cleanup file cache: %d\n", res);
         // success = false;
+    }
+    res = save_budget_data();
+    if (res < 0)
+    {
+        fprintf(stderr, "Failed to save budget metadata: %d\n", res);
     }
     if (main_layout != NULL)
     {

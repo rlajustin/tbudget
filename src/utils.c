@@ -35,19 +35,25 @@ int validate_day(int day, int month, int year)
 
 void sort_categories_by_budget()
 {
-    double max_budget = 0.0;
+    for (int i = 0; i < MAX_CATEGORIES; i++)
+    {
+        sorted_categories_indices[i] = i;
+    }
     for (int i = 0; i < category_count; i++)
     {
-        for (int j = 0; j < MAX_CATEGORIES; j++)
+        int max = categories[sorted_categories_indices[i]].budget;
+        int max_index = i;
+        for (int j = i; j < MAX_CATEGORIES; j++)
         {
-            if (categories[j].budget > max_budget)
+            if (categories[sorted_categories_indices[j]].budget > max)
             {
-
-                sorted_categories_indices[i] = j;
-                max_budget = categories[j].budget;
+                max = categories[sorted_categories_indices[j]].budget;
+                max_index = j;
             }
+            int tmp = sorted_categories_indices[i];
+            sorted_categories_indices[i] = sorted_categories_indices[max_index];
+            sorted_categories_indices[max_index] = tmp;
         }
-        max_budget = 0.0;
     }
 }
 

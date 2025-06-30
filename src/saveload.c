@@ -102,9 +102,10 @@ int load_budget_data()
             MAX_CATEGORIES,
             MAX_NAME_LEN};
         fwrite(default_constants, sizeof(int), NUM_CONSTANTS, file);
-        fwrite(&(int){0}, sizeof(int), 1, file);       // no default subscriptions
         fwrite(&(double){0}, sizeof(double), 1, file); // no default monthly budget
         fwrite(&(int){0}, sizeof(int), 1, file);       // no default categories
+        fwrite(&(Category){0}, sizeof(Category), MAX_CATEGORIES, file);
+        fwrite(&(int){0}, sizeof(int), 1, file); // no default subscriptions
     }
     fseek(file, 0, SEEK_SET);
 
@@ -134,22 +135,6 @@ int load_budget_data()
         return -1;
     }
 
-    // Read subscription count and validate
-    if (fread(&subscription_count, sizeof(int), 1, file) != 1 ||
-        subscription_count > MAX_SUBSCRIPTIONS || subscription_count < 0)
-    {
-        return -2;
-    }
-    else
-    {
-        // Read subscriptions
-        if (fread(subscriptions, sizeof(Subscription), subscription_count, file) != (size_t)subscription_count)
-        {
-            fclose(file);
-            return -1;
-        }
-    }
-
     // Read default monthly budget
     if (fread(&default_monthly_budget, sizeof(double), 1, file) != 1)
     {
@@ -165,13 +150,80 @@ int load_budget_data()
     }
     else
     {
-        if (fread(default_categories, sizeof(Category), default_category_count, file) != (size_t)default_category_count)
+        if (fread(default_categories, sizeof(Category), MAX_CATEGORIES, file) != (size_t)MAX_CATEGORIES)
         {
             fclose(file);
             return -1;
         }
     }
 
+    // Read subscription count and validate
+    if (fread(&subscription_count, sizeof(int), 1, file) != 1)
+    {
+        return -1;
+    }
+    if (
+        subscription_count < 0)
+    {
+        return -2;
+    }
+    else
+    {
+        subscriptions = (Subscription *)malloc(subscription_count * sizeof(Subscription));
+        // Read subscriptions
+        if (fread(subscriptions, sizeof(Subscription), subscription_count, file) != (size_t)subscription_count)
+        {
+            fclose(file);
+            return -1;
+        }
+    }
+
+    fclose(file);
+
+    return 1;
+}
+
+/*
+ * Initialize data from the data file
+ *
+ * Returns:
+ *   1     - Success
+ *   -1    - I/O error occurred
+ */
+int save_budget_data()
+{
+    FILE *file;
+    if (access(data_file_path, F_OK) == 0)
+    {
+        // File exists
+        file = fopen(data_file_path, "r+b");
+    }
+    else
+    {
+        return -1;
+    }
+
+    fseek(file, sizeof(FileHeader) + sizeof(int) * NUM_CONSTANTS, SEEK_SET);
+    if (fwrite(&default_monthly_budget, sizeof(double), 1, file) != 1)
+    {
+        return -1;
+    }
+    if (fwrite(&default_category_count, sizeof(int), 1, file) != 1)
+    {
+        return -1;
+    }
+    if (fwrite(&default_categories, sizeof(Category), MAX_CATEGORIES, file) != 1)
+    {
+        return -1;
+    }
+    if (fwrite(&subscription_count, sizeof(int), 1, file) != 1)
+    {
+        return -1;
+    }
+    if (fwrite(&subscriptions, sizeof(Subscription), subscription_count, file) != 1)
+    {
+        return -1;
+    }
     fclose(file);
 
     return 1;
@@ -228,7 +280,6 @@ int load_month(int year, int month)
     {
         return -1;
     }
-    char *notifmsg;
 
     // Read the categories
     // TODO default to default categories if empty
@@ -243,6 +294,7 @@ int load_month(int year, int month)
     {
         return -1;
     }
+    sort_categories_by_budget();
     fseek(file, sizeof(double) + sizeof(int) + (sizeof(Category) * MAX_CATEGORIES), SEEK_SET);
     // Read uncategorized spent
     if (fread(&uncategorized_spent, sizeof(double), 1, file) != 1)
@@ -423,14 +475,13 @@ int add_transaction(Transaction *transaction, int year, int month)
 
     // Reallocate the sorted_transactions array to make room for the new element
     TransactionNode **new_sorted = (TransactionNode **)realloc(sorted_transactions, (current_month_transaction_count + 1) * sizeof(TransactionNode *));
-
-    if (!new_sorted)
+    if (new_sorted)
+        sorted_transactions = new_sorted;
+    else
     {
-        // Handle allocation failure
         free(new_node); // Don't leak the transaction node we created earlier
         return -2;
     }
-    sorted_transactions = new_sorted;
 
     memmove(&sorted_transactions[insert_pos + 1],
             &sorted_transactions[insert_pos],
@@ -442,16 +493,94 @@ int add_transaction(Transaction *transaction, int year, int month)
     return 1;
 }
 
-// TODO:
-int add_subscription(Subscription *subscription, int year, int month)
+/*
+ * Add a subscription to the budget data file
+ * Returns:
+ *   1      - Success
+ *   -1     - I/O error occurred
+ *   -2     - Memory error occurred
+ */
+int add_subscription(Subscription *subscription)
 {
-    FILE *file = open_month_file(year, month);
-    if (!file)
+    FILE *file;
+    if (access(data_file_path, F_OK) == 0)
+    {
+        // File exists
+        file = fopen(data_file_path, "r+b");
+    }
+    else
+        return -1;
+    subscription_count++;
+    fseek(file, sizeof(FileHeader) + sizeof(int) * NUM_CONSTANTS + sizeof(double) + sizeof(int) + sizeof(Category) * MAX_CATEGORIES, SEEK_SET);
+    if (fwrite(&subscription_count, sizeof(int), 1, file) != 1)
     {
         return -1;
     }
-    return -1;
+    fseek(file, sizeof(Subscription) * (subscription_count - 1), SEEK_CUR);
+
+    if (fwrite(subscription, sizeof(Subscription), 1, file) != 1)
+    {
+        return -1;
+    }
+
+    Subscription *new_subscriptions = realloc(subscriptions, subscription_count * sizeof(Subscription));
+    if (new_subscriptions)
+    {
+        subscriptions = new_subscriptions;
+        subscriptions[subscription_count - 1] = *subscription;
+    }
+    else
+        return -2;
+    return 1;
 }
+
+/*
+ * Removes a subscription from the budget data file
+ * Returns:
+ *   1      - Success
+ *   -1     - I/O error occurred
+ *   -2     - Memory error occurred
+ */
+int remove_subscription(int index)
+{
+    FILE *file;
+    if (access(data_file_path, F_OK) == 0)
+    {
+        // File exists
+        file = fopen(data_file_path, "r+b");
+    }
+    else
+        return -1;
+    subscription_count--;
+    fseek(file, sizeof(FileHeader) + sizeof(int) * NUM_CONSTANTS + sizeof(double) + sizeof(int) + sizeof(Category) * MAX_CATEGORIES, SEEK_SET);
+    if (fwrite(&subscription_count, sizeof(int), 1, file) != 1)
+    {
+        return -1;
+    }
+    Subscription to_replace = subscriptions[subscription_count];
+
+    fseek(file, sizeof(FileHeader) + sizeof(int) * NUM_CONSTANTS + sizeof(double) + sizeof(int) + sizeof(Category) * MAX_CATEGORIES + sizeof(int) + sizeof(Subscription) * index, SEEK_CUR);
+    if (fwrite(&to_replace, sizeof(Subscription), 1, file) != 1)
+    {
+        return -1;
+    }
+    Subscription *new_subscriptions = realloc(subscriptions, subscription_count * sizeof(Subscription));
+    if (new_subscriptions)
+    {
+        subscriptions = new_subscriptions;
+        subscriptions[index] = to_replace;
+    }
+    else
+    {
+        return -2;
+    }
+
+    int new_size = sizeof(double) + sizeof(int) * NUM_CONSTANTS + sizeof(double) + sizeof(int) + (sizeof(Category) * MAX_CATEGORIES) + sizeof(int) + subscription_count * sizeof(Transaction);
+    ftruncate(fileno(file), new_size);
+
+    return 1;
+}
+
 /*
  * Add a category to the current month's data file
  *
@@ -541,23 +670,25 @@ int remove_category(int category_index, int year, int month)
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
-    // Keep the variable height calculation for transactions
-    int max_display = 10;
-    int display_count = current_month_transaction_count < max_display ? current_month_transaction_count : max_display;
-    int dialog_height = display_count > 1 ? display_count + 8 : 10;
-    int dialog_width = DEFAULT_DIALOG_WIDTH;
-    int start_y = (max_y - dialog_height) / 2;
-    int start_x = (max_x - dialog_width) / 2;
-    BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Removing Category", false, ALIGN_CENTER);
-    wnoutrefresh(dialog.boundary);
-    int choice = get_category_choice_recategorize(dialog.textbox, categories[category_index].name);
     int new_index = -1;
-    if (choice > -1)
-        new_index = sorted_categories_indices[choice];
-
+    if (category_count > 0)
+    {
+        // Keep the variable height calculation for transactions
+        int max_display = 10;
+        int display_count = current_month_transaction_count < max_display ? current_month_transaction_count : max_display;
+        int dialog_height = display_count > 1 ? display_count + 8 : 10;
+        int dialog_width = DEFAULT_DIALOG_WIDTH;
+        int start_y = (max_y - dialog_height) / 2;
+        int start_x = (max_x - dialog_width) / 2;
+        BoundedWindow dialog = draw_bounded_with_title(dialog_height, dialog_width, start_y, start_x, "Removing Category", false, ALIGN_CENTER);
+        wnoutrefresh(dialog.boundary);
+        int choice = get_category_choice_recategorize(dialog.textbox, categories[category_index].name);
+        if (choice > -1)
+            new_index = sorted_categories_indices[choice];
+    }
     // update transactions
     TransactionNode *iter = transaction_head;
-    while (iter->next != NULL)
+    while (iter != NULL)
     {
         if (iter->data.cat_index == category_index)
         {

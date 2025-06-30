@@ -18,12 +18,12 @@ header:
 // main file:
 header: sizeof(FileHeader) (maybe should add buffer?)
 constants: NUM_CONSTANTS * int
-subscriptions:
-- subscription count: int
-- every subscription sizeof(Subscription)
 default monthly budget
 default category count
 default categories
+subscriptions:
+- subscription count: int
+- every subscription sizeof(Subscription)
 
 // month file
 month budget (double)

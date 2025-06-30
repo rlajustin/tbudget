@@ -713,7 +713,7 @@ void display_subscriptions(WINDOW *win, int start_y, int selected_subscription, 
           today->tm_mday);
 
   int row = 1;
-  mvwprintw(win, row++, start_y, "Active Subscriptions:");
+  mvwprintw(win, row++, start_y, "Active Subscriptions: %d", subscription_count);
   row++;
 
   int max_y, max_x;

@@ -12,7 +12,6 @@
 #define MAX_BUFFER 1024
 #define DEFAULT_DIALOG_HEIGHT 10
 #define DEFAULT_DIALOG_WIDTH 70
-#define MAX_SUBSCRIPTIONS 1024
 
 // must be constant for savefiles
 #define MAX_CATEGORIES 32
@@ -48,10 +47,6 @@ static inline char *trunc_str(const char *str, size_t len)
 
 // Key definitions
 // #define KEY_ESCAPE 27
-
-// Mode definitions
-#define MODE_MENU 1
-#define MODE_DASHBOARD 2
 
 // Define file paths for storage
 #define APP_DIR_NAME "tbudget"
@@ -100,7 +95,7 @@ typedef struct TransactionNode
 } TransactionNode;
 
 // Global variables from data file (loaded by init)
-extern Subscription subscriptions[MAX_SUBSCRIPTIONS];
+extern Subscription *subscriptions;
 extern int subscription_count;
 extern double default_monthly_budget;
 extern Category default_categories[MAX_CATEGORIES];

@@ -13,7 +13,7 @@ TransactionNode **sorted_transactions = NULL;
 
 // data file
 int subscription_count = 0;
-Subscription subscriptions[MAX_SUBSCRIPTIONS] = {0};
+Subscription *subscriptions = 0;
 int default_category_count = 0;
 Category default_categories[MAX_CATEGORIES] = {0};
 double default_monthly_budget = 0.0;
